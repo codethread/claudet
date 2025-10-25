@@ -1,5 +1,27 @@
 import { serve } from "bun";
 import index from "./index.html";
+import qrcode from "qrcode-terminal";
+import { networkInterfaces } from "os";
+
+// Get local network IP address
+function getLocalIP(): string {
+  const nets = networkInterfaces();
+
+  for (const name of Object.keys(nets)) {
+    const interfaces = nets[name];
+    if (!interfaces) continue;
+
+    for (const net of interfaces) {
+      // Skip internal (localhost) and non-IPv4 addresses
+      const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4;
+      if (net.family === familyV4Value && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+
+  return 'localhost';
+}
 
 // Start a persistent Claude session with streaming JSON I/O
 const claudeProcess = Bun.spawn(
@@ -175,6 +197,9 @@ async function sendToClaude(message: string): Promise<{ response: string; logs: 
 }
 
 const server = serve({
+  hostname: "0.0.0.0", // Listen on all network interfaces
+  port: 3000,
+
   websocket: {
     open(ws) {
       logClients.add(ws);
@@ -288,4 +313,18 @@ const server = serve({
   },
 });
 
-console.log(`🚀 Server running at ${server.url}`);
+const localIP = getLocalIP();
+const port = server.port;
+
+console.log("\n" + "=".repeat(50));
+console.log("🚀 Server running!");
+console.log("=".repeat(50));
+console.log(`\n📍 Local:   ${server.url}`);
+console.log(`📱 Network: http://${localIP}:${port}\n`);
+
+// Generate QR code for the network URL
+const networkURL = `http://${localIP}:${port}`;
+console.log("📱 Scan QR code to open on your phone:\n");
+qrcode.generate(networkURL, { small: true });
+
+console.log("\n" + "=".repeat(50) + "\n");
