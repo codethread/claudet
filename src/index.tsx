@@ -235,9 +235,10 @@ const server = serve({
 
     "/sw.js": Bun.file("./src/sw.js"),
     "/manifest.json": Bun.file("./src/manifest.json"),
-    "/icon-180.png": Bun.file("./src/icon-180.png"),
-    "/icon-192.png": Bun.file("./src/icon-192.png"),
-    "/icon-512.png": Bun.file("./src/icon-512.png"),
+    "/logo.svg": Bun.file("./src/assets/logo.svg"),
+    "/icon-180.png": Bun.file("./src/assets/icon-180.png"),
+    "/icon-192.png": Bun.file("./src/assets/icon-192.png"),
+    "/icon-512.png": Bun.file("./src/assets/icon-512.png"),
 
     // Serve index.html for all unmatched routes.
     "/*": index,

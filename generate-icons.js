@@ -6,8 +6,8 @@ const sizes = [192, 512];
 console.log("Generating PWA icons...");
 
 for (const size of sizes) {
-  const input = "./src/icon.svg";
-  const output = `./src/icon-${size}.png`;
+  const input = "./src/assets/icon.svg";
+  const output = `./src/assets/icon-${size}.png`;
 
   try {
     // Using ImageMagick's convert or rsvg-convert if available
@@ -28,4 +28,4 @@ for (const size of sizes) {
 
 console.log("\nDone! If icons weren't generated, install ImageMagick:");
 console.log("  macOS: brew install imagemagick");
-console.log("  or manually create icon-192.png and icon-512.png");
+console.log("  or manually create src/assets/icon-192.png and src/assets/icon-512.png");
