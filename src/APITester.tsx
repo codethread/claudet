@@ -102,9 +102,9 @@ export function APITester() {
   const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
 
   return (
-    <div className="mt-8 mx-auto w-full max-w-6xl text-left flex gap-4">
+    <div className="h-full mx-auto w-full max-w-6xl text-left flex gap-4">
       {/* Chat Panel */}
-      <div className="flex-1 flex flex-col gap-4">
+      <div className="flex-1 flex flex-col gap-4 min-h-0">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Chat with Claude</h2>
           <div className={cn("text-xs flex items-center gap-2", wsConnected ? "text-green-600" : "text-red-600")}>
@@ -114,7 +114,7 @@ export function APITester() {
         </div>
 
         {/* Chat History */}
-        <div className="flex-1 bg-card border border-input rounded-xl p-4 min-h-[400px] max-h-[500px] overflow-y-auto">
+        <div className="flex-1 bg-card border border-input rounded-xl p-4 overflow-y-auto">
           {chatHistory.length === 0 ? (
             <p className="text-muted-foreground text-sm">Send a message to start chatting...</p>
           ) : (
@@ -175,7 +175,7 @@ export function APITester() {
 
       {/* Side Panel for Logs */}
       {selectedMessage && (
-        <div className="w-[500px] flex flex-col gap-4 animate-in slide-in-from-right duration-200">
+        <div className="w-[500px] flex flex-col gap-4 animate-in slide-in-from-right duration-200 min-h-0">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Message Logs</h2>
             <Button variant="ghost" size="sm" onClick={() => setSelectedMessageIndex(null)}>
@@ -183,7 +183,7 @@ export function APITester() {
             </Button>
           </div>
 
-          <div className="bg-card border border-input rounded-xl p-3 min-h-[400px] max-h-[500px] overflow-y-auto font-mono text-xs">
+          <div className="bg-card border border-input rounded-xl p-3 flex-1 overflow-y-auto font-mono text-xs">
             {!selectedMessage.logs || selectedMessage.logs.length === 0 ? (
               <p className="text-muted-foreground">No logs available</p>
             ) : (
