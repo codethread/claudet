@@ -8,7 +8,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`
 🏗️  Bun Build Script
 
-Usage: bun run build.ts [options]
+Usage: bun run build [options]
 
 Common Options:
   --outdir <path>          Output directory (default: "dist")
@@ -28,7 +28,7 @@ Common Options:
   --help, -h               Show this help message
 
 Example:
-  bun run build.ts --outdir=dist --minify --sourcemap=linked --external=react,react-dom
+  bun run build --outdir=dist --minify --sourcemap=linked --external=react,react-dom
 `);
   process.exit(0);
 }
