@@ -1,9 +1,9 @@
 const CACHE_NAME = 'claude-chat-v1';
 const urlsToCache = [
   '/',
-  '/index.html',
-  '/frontend.tsx',
-  '/index.css',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {

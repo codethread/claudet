@@ -199,6 +199,10 @@ async function sendToClaude(message: string): Promise<{ response: string; logs: 
 const server = serve({
   hostname: "0.0.0.0", // Listen on all network interfaces
   port: 3000,
+  tls: {
+    cert: Bun.file("./certs/localhost+3.pem"),
+    key: Bun.file("./certs/localhost+3-key.pem"),
+  },
 
   websocket: {
     open(ws) {
@@ -228,6 +232,12 @@ const server = serve({
         return new Response("WebSocket upgrade failed", { status: 500 });
       },
     },
+
+    "/sw.js": Bun.file("./src/sw.js"),
+    "/manifest.json": Bun.file("./src/manifest.json"),
+    "/icon-180.png": Bun.file("./src/icon-180.png"),
+    "/icon-192.png": Bun.file("./src/icon-192.png"),
+    "/icon-512.png": Bun.file("./src/icon-512.png"),
 
     // Serve index.html for all unmatched routes.
     "/*": index,
@@ -320,10 +330,10 @@ console.log("\n" + "=".repeat(50));
 console.log("🚀 Server running!");
 console.log("=".repeat(50));
 console.log(`\n📍 Local:   ${server.url}`);
-console.log(`📱 Network: http://${localIP}:${port}\n`);
+console.log(`📱 Network: https://${localIP}:${port}\n`);
 
 // Generate QR code for the network URL
-const networkURL = `http://${localIP}:${port}`;
+const networkURL = `https://${localIP}:${port}`;
 console.log("📱 Scan QR code to open on your phone:\n");
 qrcode.generate(networkURL, { small: true });
 

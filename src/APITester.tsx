@@ -102,19 +102,19 @@ export function APITester() {
   const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
 
   return (
-    <div className="h-full mx-auto w-full max-w-6xl text-left flex gap-4">
+    <div className="h-full w-full text-left flex flex-col lg:flex-row gap-2 sm:gap-4">
       {/* Chat Panel */}
-      <div className="flex-1 flex flex-col gap-4 min-h-0">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Chat with Claude</h2>
-          <div className={cn("text-xs flex items-center gap-2", wsConnected ? "text-green-600" : "text-red-600")}>
+      <div className="flex-1 flex flex-col gap-2 sm:gap-4 min-h-0 pb-safe">
+        <div className="flex items-center justify-between flex-shrink-0">
+          <h2 className="text-lg sm:text-xl font-semibold">Chat with Claude</h2>
+          <div className={cn("text-xs flex items-center gap-1 sm:gap-2", wsConnected ? "text-green-600" : "text-red-600")}>
             <div className={cn("w-2 h-2 rounded-full", wsConnected ? "bg-green-600" : "bg-red-600")} />
-            {wsConnected ? "Connected" : "Disconnected"}
+            <span className="hidden sm:inline">{wsConnected ? "Connected" : "Disconnected"}</span>
           </div>
         </div>
 
         {/* Chat History */}
-        <div className="flex-1 bg-card border border-input rounded-xl p-4 overflow-y-auto">
+        <div className="flex-1 bg-card border border-input rounded-xl p-2 sm:p-4 overflow-y-auto min-h-0">
           {chatHistory.length === 0 ? (
             <p className="text-muted-foreground text-sm">Send a message to start chatting...</p>
           ) : (
@@ -124,8 +124,8 @@ export function APITester() {
                   key={i}
                   onClick={() => msg.role === "assistant" && msg.logs ? setSelectedMessageIndex(i) : null}
                   className={cn(
-                    "p-3 rounded-lg",
-                    msg.role === "user" ? "bg-primary/10 ml-8" : "bg-muted mr-8",
+                    "p-2 sm:p-3 rounded-lg",
+                    msg.role === "user" ? "bg-primary/10 ml-2 sm:ml-8" : "bg-muted mr-2 sm:mr-8",
                     msg.role === "assistant" && msg.logs && "cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all",
                     selectedMessageIndex === i && "ring-2 ring-primary"
                   )}
@@ -144,7 +144,7 @@ export function APITester() {
                 </div>
               ))}
               {isLoading && (
-                <div className="p-3 rounded-lg bg-muted mr-8">
+                <div className="p-2 sm:p-3 rounded-lg bg-muted mr-2 sm:mr-8">
                   <div className="text-xs font-semibold mb-1 text-muted-foreground">Claude</div>
                   <div className="text-sm text-muted-foreground">Thinking...</div>
                   {currentLogs.length > 0 && (
@@ -159,7 +159,7 @@ export function APITester() {
         </div>
 
         {/* Chat Input */}
-        <form onSubmit={sendMessage} className="flex gap-2">
+        <form onSubmit={sendMessage} className="flex gap-2 flex-shrink-0">
           <Input
             ref={messageInputRef}
             type="text"
@@ -175,15 +175,15 @@ export function APITester() {
 
       {/* Side Panel for Logs */}
       {selectedMessage && (
-        <div className="w-[500px] flex flex-col gap-4 animate-in slide-in-from-right duration-200 min-h-0">
+        <div className="w-full lg:w-[500px] flex flex-col gap-2 sm:gap-4 animate-in slide-in-from-right duration-200 min-h-0 lg:min-h-full">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Message Logs</h2>
+            <h2 className="text-lg sm:text-xl font-semibold">Message Logs</h2>
             <Button variant="ghost" size="sm" onClick={() => setSelectedMessageIndex(null)}>
               ✕
             </Button>
           </div>
 
-          <div className="bg-card border border-input rounded-xl p-3 flex-1 overflow-y-auto font-mono text-xs">
+          <div className="bg-card border border-input rounded-xl p-2 sm:p-3 flex-1 overflow-y-auto font-mono text-xs">
             {!selectedMessage.logs || selectedMessage.logs.length === 0 ? (
               <p className="text-muted-foreground">No logs available</p>
             ) : (

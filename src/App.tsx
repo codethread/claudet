@@ -3,11 +3,11 @@ import "./index.css";
 
 export function App() {
   return (
-    <div className="container mx-auto p-4 md:p-8 h-screen flex flex-col">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold">Claude Chat</h1>
+    <div className="w-full h-screen-safe flex flex-col p-2 sm:p-4 md:p-6 px-safe">
+      <header className="mb-2 sm:mb-4 flex-shrink-0">
+        <h1 className="text-xl sm:text-2xl font-bold">Claude Chat</h1>
       </header>
-      <main className="flex-1 min-h-0">
+      <main className="flex-1 min-h-0 overflow-hidden">
         <APITester />
       </main>
     </div>
