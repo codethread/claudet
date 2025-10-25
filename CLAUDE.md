@@ -2,11 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Processes
+
+- ALWAYS update CLAUDE.md with up-to-date architecture and project structure after changes
+- ALWAYS verify final changes at appropriate points with `curl` or playwright MCP as appropriate
+- ALWAYS spawn several researcher agents to outline any best practices, or helpful libraries when starting new features without existing patterns in the codebase
+
 ## Runtime & Tooling
 
-This project uses **Bun** as the runtime. See [docs/bun.md](docs/bun.md) for comprehensive Bun-specific guidelines.
+This project uses **Bun** as the runtime. See [docs/bun.md](./docs/bun.md) for comprehensive Bun-specific guidelines.
 
 Key points:
+
 - Use `bun` instead of `node`, `npm`, `pnpm`, or `vite`
 - Use `bun test` for testing (not Jest or Vitest)
 - Bun automatically loads `.env` files (no dotenv package needed)
@@ -77,6 +84,7 @@ This is a **Bun-native full-stack application** using `Bun.serve()` with routing
 ### Build System (scripts/build.ts)
 
 Custom build script with:
+
 - HTML entry point discovery via glob patterns
 - Tailwind CSS integration via plugin
 - CLI argument parsing for build customization
@@ -115,6 +123,7 @@ docs/
 ## Testing
 
 Use `bun test` with the built-in test runner:
+
 - Test files should use `.test.ts` or `.spec.ts` suffix
 - Import from `bun:test`: `import { test, expect, describe } from "bun:test"`
 - 5-second timeout per test (configurable with `--timeout`)
