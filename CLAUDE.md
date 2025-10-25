@@ -1,111 +1,127 @@
----
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
----
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Bun automatically loads .env, so don't use dotenv.
+## Runtime & Tooling
 
-## APIs
+This project uses **Bun** as the runtime. See [docs/bun.md](docs/bun.md) for comprehensive Bun-specific guidelines.
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+Key points:
+- Use `bun` instead of `node`, `npm`, `pnpm`, or `vite`
+- Use `bun test` for testing (not Jest or Vitest)
+- Bun automatically loads `.env` files (no dotenv package needed)
+- Prefer Bun APIs: `Bun.serve()`, `Bun.file()`, `bun:sqlite`, etc.
+
+## Development Commands
+
+```bash
+# Install dependencies
+bun install
+
+# Development server with hot reload (port 3000, HTTPS)
+bun dev
+
+# Production server
+bun start
+
+# Build for production
+bun run build
+
+# Generate PWA icons (requires ImageMagick: brew install imagemagick)
+bun run generate:icons
+
+# Run tests
+bun test
+
+# Run specific test file
+bun test path/to/test.ts
+
+# Run tests matching pattern
+bun test --test-name-pattern "pattern"
+```
+
+## Architecture
+
+### Server Architecture (src/index.tsx)
+
+This is a **Bun-native full-stack application** using `Bun.serve()` with routing, WebSockets, and HTML imports:
+
+1. **HTML Import Pattern**: Server imports `index.html` which includes `<script type="module" src="./frontend.tsx">`. Bun's bundler automatically transpiles and bundles React/TypeScript.
+
+2. **Persistent Claude CLI Integration**:
+   - Spawns a long-running `claude` CLI process with streaming JSON I/O
+   - Maintains session state and request/response correlation via session IDs
+   - API endpoint at `/api/chat` for sending messages to Claude
+   - WebSocket endpoint at `/ws` for real-time log streaming to clients
+
+3. **HTTPS Development Server**:
+   - Uses TLS certificates in `./certs/` directory
+   - Serves on `0.0.0.0:3000` for network access
+   - Displays QR code on startup for easy mobile access
+
+4. **Routes**:
+   - `/*` - Serves index.html (SPA fallback)
+   - `/api/chat` - POST endpoint for Claude interactions
+   - `/api/hello`, `/api/hello/:name` - Example API endpoints
+   - `/ws` - WebSocket upgrade endpoint
+   - PWA assets: `/manifest.json`, `/sw.js`, icons
+
+### Frontend Architecture
+
+- **React 19** with TypeScript
+- **Tailwind CSS 4** for styling (uses `bun-plugin-tailwind`)
+- **shadcn/ui** components in `src/components/ui/`
+- **PWA Support**: Service worker, manifest, and icon generation
+- Path alias: `@/*` maps to `./src/*`
+
+### Build System (scripts/build.ts)
+
+Custom build script with:
+- HTML entry point discovery via glob patterns
+- Tailwind CSS integration via plugin
+- CLI argument parsing for build customization
+- Production optimizations (minify, sourcemap, etc.)
+
+## Project Structure
+
+```
+src/
+├── index.tsx              # Server entry point (Bun.serve + routes)
+├── index.html             # HTML entry with React imports
+├── frontend.tsx           # React root component
+├── App.tsx                # Main application component
+├── APITester.tsx          # Claude API testing UI
+├── components/ui/         # shadcn/ui components
+├── lib/utils.ts           # Utility functions (cn, etc.)
+├── manifest.json          # PWA manifest
+└── sw.js                  # Service worker
+
+scripts/
+├── build.ts               # Production build script
+└── generate-pwa-icons.js  # Icon generation from SVG
+
+docs/
+└── bun.md                 # Bun guidelines (important reference)
+```
+
+## TypeScript Configuration
+
+- **Strict mode enabled** with additional safety checks
+- **Module**: "Preserve" with bundler resolution
+- **JSX**: react-jsx (React 19)
+- **Path alias**: `@/*` → `./src/*`
+- Allows `.ts` imports for bundler compatibility
 
 ## Testing
 
-Use `bun test` to run tests.
+Use `bun test` with the built-in test runner:
+- Test files should use `.test.ts` or `.spec.ts` suffix
+- Import from `bun:test`: `import { test, expect, describe } from "bun:test"`
+- 5-second timeout per test (configurable with `--timeout`)
+- Supports snapshots with `--update-snapshots`
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+## PWA & Assets
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
-
-## Frontend
-
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-
-// import .css files directly and it works
-import './index.css';
-
-import { createRoot } from "react-dom/client";
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+- Icons are generated from `src/assets/icon.svg`
+- Run `bun run generate:icons` to regenerate PNG variants
+- Service worker handles offline caching and PWA installation
