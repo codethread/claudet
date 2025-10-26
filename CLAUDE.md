@@ -37,7 +37,7 @@ bun run build
 # Generate PWA icons (requires ImageMagick: brew install imagemagick)
 bun run generate:icons
 
-# Run tests
+# Run unit tests
 bun test
 
 # Run specific test file
@@ -45,6 +45,12 @@ bun test path/to/test.ts
 
 # Run tests matching pattern
 bun test --test-name-pattern "pattern"
+
+# E2E tests with Playwright
+bun run test:e2e              # Run headless
+bun run test:e2e:ui           # Run with Playwright UI
+bun run test:e2e:headed       # Run with visible browser
+npx playwright show-report    # View latest test report
 ```
 
 ## Architecture
@@ -104,12 +110,20 @@ src/
 ├── manifest.json          # PWA manifest
 └── sw.js                  # Service worker
 
+tests/
+├── chat.spec.ts           # Playwright E2E tests
+└── screenshots/           # Test screenshots (committed to git)
+    ├── desktop-chat.png
+    └── mobile-iphone6-chat.png
+
 scripts/
 ├── build.ts               # Production build script
 └── generate-pwa-icons.js  # Icon generation from SVG
 
 docs/
 └── bun.md                 # Bun guidelines (important reference)
+
+playwright.config.ts       # Playwright configuration
 ```
 
 ## TypeScript Configuration
@@ -122,12 +136,63 @@ docs/
 
 ## Testing
 
+### Unit Tests
+
 Use `bun test` with the built-in test runner:
 
 - Test files should use `.test.ts` or `.spec.ts` suffix
 - Import from `bun:test`: `import { test, expect, describe } from "bun:test"`
 - 5-second timeout per test (configurable with `--timeout`)
 - Supports snapshots with `--update-snapshots`
+
+### E2E Tests with Playwright
+
+E2E tests are located in `tests/` directory and use Playwright for browser automation.
+
+**Configuration** (`playwright.config.ts`):
+- HTTPS support for self-signed dev certificates
+- Automatic dev server startup
+- HTML reporter for test results
+- Screenshots saved to `tests/screenshots/`
+
+**Writing UI Tests**:
+
+1. **Test Structure**: Place tests in `tests/*.spec.ts` files
+2. **Long Timeouts**: Use `test.setTimeout(120000)` for tests involving LLM responses
+3. **Deterministic Prompts**: Use precise prompts to get predictable LLM responses
+   ```typescript
+   // Good: Precise, constrained prompt
+   await input.fill('Please respond with exactly these three words: "Apple Banana Cherry"');
+
+   // Bad: Open-ended prompt that may vary
+   await input.fill('Tell me about fruits');
+   ```
+
+4. **Screenshots**: Capture screenshots for different viewports
+   ```typescript
+   // Mobile viewport (iPhone 6: 375x667)
+   await page.setViewportSize({ width: 375, height: 667 });
+   await page.screenshot({ path: 'tests/screenshots/mobile-feature.png' });
+
+   // Desktop viewport
+   await page.setViewportSize({ width: 1920, height: 1080 });
+   await page.screenshot({ path: 'tests/screenshots/desktop-feature.png' });
+   ```
+
+5. **WebSocket Handling**: Wait for connection before interacting
+   ```typescript
+   await expect(page.getByText('Connected')).toBeVisible({ timeout: 10000 });
+   ```
+
+**Screenshot Management**:
+- Screenshots in `tests/screenshots/` ARE committed to git (for visual documentation)
+- Test reports in `playwright-report/` are gitignored
+- Use consistent naming: `[viewport]-[feature].png`
+
+**Verifying Changes**:
+- After UI changes, run `bun run test:e2e` to regenerate screenshots
+- Review screenshots visually to confirm layout improvements
+- Use Playwright MCP tools during development for interactive testing
 
 ## PWA & Assets
 
