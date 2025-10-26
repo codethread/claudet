@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production bun src/backend/index.tsx",
     "build": "bun scripts/build.ts",
     "generate:icons": "bun scripts/generate-pwa-icons.js",
+    "validate": "bun run type-check && bun run test && bun run test:e2e && bun run build",
     "test": "bun test src/",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

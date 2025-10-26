@@ -1,14 +1,10 @@
 import index from "../frontend/index.html";
 import qrcode from "qrcode-terminal";
 import { networkInterfaces } from "os";
-import { createActor } from "xstate";
-import {
-  claudeRunnerMachine,
-  createClaudeRunnerMachine,
-  type ClaudeResponse,
-  type ClaudeRunnerMachine,
-} from "./claudeRunner";
+import { RealClaudeCodeService } from "./services";
 import type { ClaudeCodeService } from "./services/ClaudeCodeService";
+import { SessionManager } from "./SessionManager";
+import type { ClaudeResponse } from "./claudeRunner";
 
 // Get local network IP address
 function getLocalIP(): string {
@@ -30,54 +26,50 @@ function getLocalIP(): string {
   return "localhost";
 }
 
-// Module-level actor (can be overridden via startServer)
-let claudeActor: ReturnType<typeof createActor<ClaudeRunnerMachine>>;
-let isReading = false; // Track if we're already reading output
+// Module-level session manager
+let sessionManager: SessionManager;
+const sessionReaders = new Map<string, boolean>(); // Track which sessions are being read
 
-function initializeActor(machine: ClaudeRunnerMachine) {
-  // Stop existing actor if any
-  if (claudeActor) {
-    try {
-      claudeActor.stop();
-    } catch (e) {
-      // Ignore errors on stop
-    }
-  }
+function initializeSessionManager(service: ClaudeCodeService) {
+  sessionManager = new SessionManager(service);
+  // Create a default session
+  const defaultSession = sessionManager.createSession();
+  defaultSession.actor.send({ type: "START_PROCESS" });
+  console.log(`🤖 Default Claude session created: ${defaultSession.id}`);
 
-  isReading = false; // Reset reading flag
-  claudeActor = createActor(machine);
-  claudeActor.start();
-  claudeActor.send({ type: "START_PROCESS" });
-  console.log("🤖 Claude session starting...");
-
-  // Start reading output after a short delay
+  // Start reading output for this session
   setTimeout(() => {
-    if (!isReading) {
-      readClaudeOutput();
-    }
+    readSessionOutput(defaultSession.id);
   }, 100);
 }
 
-// Initialize with default production machine
-initializeActor(claudeRunnerMachine);
+// Initialize with default production service
+initializeSessionManager(new RealClaudeCodeService());
 
-// Start reading Claude output in the background
-async function readClaudeOutput() {
-  if (isReading) {
-    console.log("Already reading Claude output, skipping...");
+// Start reading Claude output for a specific session
+async function readSessionOutput(sessionId: string) {
+  if (sessionReaders.get(sessionId)) {
+    console.log(`Already reading output for session ${sessionId}, skipping...`);
     return;
   }
 
-  isReading = true;
+  sessionReaders.set(sessionId, true);
 
   try {
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      console.error(`Session ${sessionId} not found`);
+      sessionReaders.delete(sessionId);
+      return;
+    }
+
     // Wait a bit for process handle to be ready
     await new Promise(resolve => setTimeout(resolve, 200));
 
-    const context = claudeActor.getSnapshot().context;
+    const context = session.actor.getSnapshot().context;
     if (!context.processHandle) {
-      console.error("No process handle available");
-      isReading = false;
+      console.error(`No process handle available for session ${sessionId}`);
+      sessionReaders.delete(sessionId);
       return;
     }
 
@@ -99,28 +91,36 @@ async function readClaudeOutput() {
         if (!line.trim()) continue;
 
         console.log(
-          `[Claude Log] ${line.substring(0, 100)}... (clients: ${claudeActor.getSnapshot().context.logClients.size})`,
+          `[Session ${sessionId.substring(0, 8)}] ${line.substring(0, 100)}...`,
         );
 
         // Send the output line to the state machine
-        claudeActor.send({ type: "OUTPUT_LINE", line });
+        session.actor.send({ type: "OUTPUT_LINE", line });
       }
     }
   } catch (error) {
-    console.error("Error reading Claude output:", error);
-    claudeActor.send({ type: "PROCESS_ERROR", error: String(error) });
+    console.error(`Error reading output for session ${sessionId}:`, error);
+    const session = sessionManager.getSession(sessionId);
+    if (session) {
+      session.actor.send({ type: "PROCESS_ERROR", error: String(error) });
+    }
   } finally {
-    isReading = false;
+    sessionReaders.delete(sessionId);
   }
 }
 
-// Function to send a message to Claude
-async function sendToClaude(message: string): Promise<ClaudeResponse> {
+// Function to send a message to a specific Claude session
+async function sendToClaude(sessionId: string, message: string): Promise<ClaudeResponse> {
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    throw new Error(`Session ${sessionId} not found`);
+  }
+
   const messageId = crypto.randomUUID();
 
   return new Promise((resolve, reject) => {
     // Send the message first so the state machine creates the pending request
-    claudeActor.send({
+    session.actor.send({
       type: "SEND_MESSAGE",
       message,
       messageId,
@@ -131,7 +131,7 @@ async function sendToClaude(message: string): Promise<ClaudeResponse> {
     let attempts = 0;
 
     const checkRequest = () => {
-      const context = claudeActor.getSnapshot().context;
+      const context = session.actor.getSnapshot().context;
       const request = context.pendingRequests.get(messageId);
 
       if (request) {
@@ -150,7 +150,7 @@ async function sendToClaude(message: string): Promise<ClaudeResponse> {
 
     // Set a timeout
     setTimeout(() => {
-      const currentContext = claudeActor.getSnapshot().context;
+      const currentContext = session.actor.getSnapshot().context;
       if (currentContext.pendingRequests.has(messageId)) {
         currentContext.pendingRequests.delete(messageId);
         reject(new Error("Request timeout"));
@@ -167,10 +167,9 @@ export interface StartServerOptions {
 }
 
 export function startServer(options: StartServerOptions = {}) {
-  // If a custom service is provided, reinitialize the actor
+  // If a custom service is provided, reinitialize the session manager
   if (options.service) {
-    const customMachine = createClaudeRunnerMachine(options.service);
-    initializeActor(customMachine);
+    initializeSessionManager(options.service);
   }
   const server = Bun.serve({
     hostname: "0.0.0.0", // Listen on all network interfaces
@@ -183,16 +182,25 @@ export function startServer(options: StartServerOptions = {}) {
 
     websocket: {
       open(ws) {
-        claudeActor.send({ type: "REGISTER_WS_CLIENT", client: ws });
-        console.log(
-          "✅ WebSocket client connected. Total clients:",
-          claudeActor.getSnapshot().context.logClients.size,
-        );
-        // Send a test message to confirm connection
+        // Register this client with all sessions
+        // Note: In a production app, you'd want to track which sessions
+        // the client is subscribed to, but for simplicity we'll broadcast to all
+        const sessions = sessionManager.listSessions();
+        for (const { id } of sessions) {
+          const session = sessionManager.getSession(id);
+          if (session) {
+            session.actor.send({ type: "REGISTER_WS_CLIENT", client: ws });
+          }
+        }
+
+        console.log("✅ WebSocket client connected");
+
+        // Send connection confirmation with list of sessions
         ws.send(
           JSON.stringify({
             type: "connection",
             status: "connected",
+            sessions: sessions.map(s => ({ id: s.id, createdAt: s.createdAt })),
             timestamp: new Date().toISOString(),
           }),
         );
@@ -203,11 +211,15 @@ export function startServer(options: StartServerOptions = {}) {
         ws.send(`Echo: ${message}`);
       },
       close(ws) {
-        claudeActor.send({ type: "UNREGISTER_WS_CLIENT", client: ws });
-        console.log(
-          "❌ WebSocket client disconnected. Total clients:",
-          claudeActor.getSnapshot().context.logClients.size,
-        );
+        // Unregister from all sessions
+        const sessions = sessionManager.listSessions();
+        for (const { id } of sessions) {
+          const session = sessionManager.getSession(id);
+          if (session) {
+            session.actor.send({ type: "UNREGISTER_WS_CLIENT", client: ws });
+          }
+        }
+        console.log("❌ WebSocket client disconnected");
       },
     },
 
@@ -254,11 +266,55 @@ export function startServer(options: StartServerOptions = {}) {
         });
       },
 
+      "/api/sessions": {
+        async GET(req) {
+          try {
+            const sessions = sessionManager.listSessions();
+            return Response.json({
+              sessions: sessions.map(s => ({
+                id: s.id,
+                createdAt: s.createdAt,
+              })),
+            });
+          } catch (error) {
+            console.error("Error in GET /api/sessions:", error);
+            return Response.json(
+              { error: error instanceof Error ? error.message : "Unknown error" },
+              { status: 500 },
+            );
+          }
+        },
+        async POST(req) {
+          try {
+            const session = sessionManager.createSession();
+            session.actor.send({ type: "START_PROCESS" });
+            console.log(`🤖 New Claude session created: ${session.id}`);
+
+            // Start reading output for this new session
+            setTimeout(() => {
+              readSessionOutput(session.id);
+            }, 100);
+
+            return Response.json({
+              id: session.id,
+              createdAt: session.createdAt,
+            });
+          } catch (error) {
+            console.error("Error in POST /api/sessions:", error);
+            return Response.json(
+              { error: error instanceof Error ? error.message : "Unknown error" },
+              { status: 500 },
+            );
+          }
+        },
+      },
+
       "/api/chat": {
         async POST(req) {
           try {
             const body = await req.json();
             const message = body.message;
+            const sessionId = body.sessionId;
 
             if (!message) {
               return Response.json(
@@ -267,11 +323,19 @@ export function startServer(options: StartServerOptions = {}) {
               );
             }
 
-            const { response, logs } = await sendToClaude(message);
+            // If no sessionId provided, use the default session
+            let targetSessionId = sessionId;
+            if (!targetSessionId) {
+              const defaultSession = sessionManager.getOrCreateDefaultSession();
+              targetSessionId = defaultSession.id;
+            }
+
+            const { response, logs } = await sendToClaude(targetSessionId, message);
 
             return Response.json({
               response,
               logs,
+              sessionId: targetSessionId,
               timestamp: new Date().toISOString(),
             });
           } catch (error) {

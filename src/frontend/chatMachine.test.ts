@@ -5,17 +5,21 @@ import {
   type ChatMachineContext,
   type ChatMachineEvent,
   type ChatAPIResponse,
+  type SendMessageInput,
 } from "./chatMachine";
+
+const TEST_SESSION_ID = "test-session-123";
 
 // Helper to create a test actor with optional initial context
 function createTestActor(initialContext?: Partial<ChatMachineContext>) {
   const machine = chatMachine.provide({
     actors: {
-      sendMessage: fromPromise<ChatAPIResponse, { message: string }>(
+      sendMessage: fromPromise<ChatAPIResponse, SendMessageInput>(
         async ({ input }) => {
           return {
             response: `Echo: ${input.message}`,
             logs: ["log1", "log2"],
+            sessionId: input.sessionId || TEST_SESSION_ID,
           };
         }
       ),
@@ -23,7 +27,11 @@ function createTestActor(initialContext?: Partial<ChatMachineContext>) {
   });
 
   const actor = createActor(machine, {
-    input: initialContext,
+    input: {
+      currentSessionId: TEST_SESSION_ID,
+      sessions: [{ id: TEST_SESSION_ID, createdAt: new Date().toISOString() }],
+      ...initialContext,
+    },
   });
   actor.start();
 
@@ -34,7 +42,7 @@ function createTestActor(initialContext?: Partial<ChatMachineContext>) {
 function createErrorActor(errorMessage: string) {
   const machine = chatMachine.provide({
     actors: {
-      sendMessage: fromPromise<ChatAPIResponse, { message: string }>(
+      sendMessage: fromPromise<ChatAPIResponse, SendMessageInput>(
         async () => {
           throw new Error(errorMessage);
         }
@@ -42,7 +50,12 @@ function createErrorActor(errorMessage: string) {
     },
   });
 
-  const actor = createActor(machine, { input: undefined });
+  const actor = createActor(machine, {
+    input: {
+      currentSessionId: TEST_SESSION_ID,
+      sessions: [{ id: TEST_SESSION_ID, createdAt: new Date().toISOString() }],
+    },
+  });
   actor.start();
 
   return actor;
@@ -54,12 +67,13 @@ describe("chatMachine", () => {
       const actor = createTestActor();
 
       expect(actor.getSnapshot().value).toBe("disconnected");
-      expect(actor.getSnapshot().context).toEqual({
-        chatHistory: [],
-        selectedMessageIndex: null,
-        currentLogs: [],
-        error: null,
-      });
+      const context = actor.getSnapshot().context;
+      expect(context.sessions).toHaveLength(1);
+      expect(context.currentSessionId).toBe(TEST_SESSION_ID);
+      expect(context.sessionChatHistories.size).toBe(0);
+      expect(context.selectedMessageIndex).toBe(null);
+      expect(context.currentLogs).toEqual([]);
+      expect(context.error).toBe(null);
 
       actor.stop();
     });
@@ -127,10 +141,15 @@ describe("chatMachine", () => {
       {
         name: "should select message by index",
         initialContext: {
-          chatHistory: [
-            { role: "user" as const, content: "Hello" },
-            { role: "assistant" as const, content: "Hi", logs: ["log"] },
-          ],
+          sessionChatHistories: new Map([
+            [
+              TEST_SESSION_ID,
+              [
+                { role: "user" as const, content: "Hello" },
+                { role: "assistant" as const, content: "Hi", logs: ["log"] },
+              ],
+            ],
+          ]),
         },
         event: { type: "SELECT_MESSAGE", index: 1 } as const,
         expectedSelectedIndex: 1,
@@ -138,10 +157,15 @@ describe("chatMachine", () => {
       {
         name: "should deselect message",
         initialContext: {
-          chatHistory: [
-            { role: "user" as const, content: "Hello" },
-            { role: "assistant" as const, content: "Hi", logs: ["log"] },
-          ],
+          sessionChatHistories: new Map([
+            [
+              TEST_SESSION_ID,
+              [
+                { role: "user" as const, content: "Hello" },
+                { role: "assistant" as const, content: "Hi", logs: ["log"] },
+              ],
+            ],
+          ]),
           selectedMessageIndex: 1,
         },
         event: { type: "DESELECT_MESSAGE" } as const,
@@ -194,8 +218,9 @@ describe("chatMachine", () => {
       actor.send({ type: "SEND_MESSAGE", message: "Hello" });
 
       const snapshot = actor.getSnapshot();
-      expect(snapshot.context.chatHistory).toHaveLength(1);
-      expect(snapshot.context.chatHistory[0]).toEqual({
+      const chatHistory = snapshot.context.sessionChatHistories.get(TEST_SESSION_ID) || [];
+      expect(chatHistory).toHaveLength(1);
+      expect(chatHistory[0]).toEqual({
         role: "user",
         content: "Hello",
       });
@@ -212,8 +237,9 @@ describe("chatMachine", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const snapshot = actor.getSnapshot();
-      expect(snapshot.context.chatHistory).toHaveLength(2);
-      expect(snapshot.context.chatHistory[1]).toEqual({
+      const chatHistory = snapshot.context.sessionChatHistories.get(TEST_SESSION_ID) || [];
+      expect(chatHistory).toHaveLength(2);
+      expect(chatHistory[1]).toEqual({
         role: "assistant",
         content: "Echo: Hello",
         logs: ["log1", "log2"],
@@ -244,9 +270,10 @@ describe("chatMachine", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const snapshot = actor.getSnapshot();
+      const chatHistory = snapshot.context.sessionChatHistories.get(TEST_SESSION_ID) || [];
       expect(snapshot.value).toBe("idle");
-      expect(snapshot.context.chatHistory).toHaveLength(2);
-      expect(snapshot.context.chatHistory[1]!.content).toContain("API Error");
+      expect(chatHistory).toHaveLength(2);
+      expect(chatHistory[1]!.content).toContain("API Error");
       expect(snapshot.context.error).toContain("API Error");
 
       actor.stop();
@@ -260,9 +287,23 @@ describe("chatMachine", () => {
       actor.send({ type: "WEBSOCKET_CONNECTED" });
       actor.send({ type: "SEND_MESSAGE", message: "Test" });
 
-      // Simulate websocket messages arriving
-      actor.send({ type: "WEBSOCKET_MESSAGE", data: "log message 1" });
-      actor.send({ type: "WEBSOCKET_MESSAGE", data: "log message 2" });
+      // Simulate websocket messages arriving (now needs to be JSON with sessionId)
+      actor.send({
+        type: "WEBSOCKET_MESSAGE",
+        data: JSON.stringify({
+          type: "log",
+          sessionId: TEST_SESSION_ID,
+          data: "log message 1",
+        }),
+      });
+      actor.send({
+        type: "WEBSOCKET_MESSAGE",
+        data: JSON.stringify({
+          type: "log",
+          sessionId: TEST_SESSION_ID,
+          data: "log message 2",
+        }),
+      });
 
       const snapshot = actor.getSnapshot();
       expect(snapshot.context.currentLogs).toEqual([
@@ -279,7 +320,14 @@ describe("chatMachine", () => {
       actor.send({ type: "WEBSOCKET_CONNECTED" });
       actor.send({ type: "SEND_MESSAGE", message: "Test" });
 
-      actor.send({ type: "WEBSOCKET_MESSAGE", data: "log 1" });
+      actor.send({
+        type: "WEBSOCKET_MESSAGE",
+        data: JSON.stringify({
+          type: "log",
+          sessionId: TEST_SESSION_ID,
+          data: "log 1",
+        }),
+      });
       expect(actor.getSnapshot().context.currentLogs).toHaveLength(1);
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -344,9 +392,10 @@ describe("chatMachine", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const snapshot = actor.getSnapshot();
-      expect(snapshot.context.chatHistory).toHaveLength(4); // 2 user + 2 assistant
-      expect(snapshot.context.chatHistory[0]!.content).toBe("Message 1");
-      expect(snapshot.context.chatHistory[2]!.content).toBe("Message 2");
+      const chatHistory = snapshot.context.sessionChatHistories.get(TEST_SESSION_ID) || [];
+      expect(chatHistory).toHaveLength(4); // 2 user + 2 assistant
+      expect(chatHistory[0]!.content).toBe("Message 1");
+      expect(chatHistory[2]!.content).toBe("Message 2");
 
       actor.stop();
     });

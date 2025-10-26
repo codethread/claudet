@@ -8,20 +8,39 @@ export const MessageSchema = z.object({
   logs: z.array(z.string()).optional(),
 });
 
-export const WebSocketMessageSchema = z.string();
+export const SessionSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+});
+
+export const WebSocketMessageSchema = z.object({
+  type: z.string(),
+  sessionId: z.string().optional(),
+  data: z.string().optional(),
+  sessions: z.array(SessionSchema).optional(),
+});
 
 export const ChatAPIResponseSchema = z.object({
   response: z.string(),
   logs: z.array(z.string()).optional(),
+  sessionId: z.string().optional(),
+});
+
+export const SessionsResponseSchema = z.object({
+  sessions: z.array(SessionSchema),
 });
 
 // TypeScript types inferred from Zod schemas
 export type Message = z.infer<typeof MessageSchema>;
+export type Session = z.infer<typeof SessionSchema>;
 export type ChatAPIResponse = z.infer<typeof ChatAPIResponseSchema>;
+export type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
 
 // Machine context
 export interface ChatMachineContext {
-  chatHistory: Message[];
+  sessions: Session[];
+  currentSessionId: string | null;
+  sessionChatHistories: Map<string, Message[]>;
   selectedMessageIndex: number | null;
   currentLogs: string[];
   error: string | null;
@@ -38,11 +57,16 @@ export type ChatMachineEvent =
   | { type: "MESSAGE_ERROR"; error: string }
   | { type: "SELECT_MESSAGE"; index: number }
   | { type: "DESELECT_MESSAGE" }
-  | { type: "CLEAR_ERROR" };
+  | { type: "CLEAR_ERROR" }
+  | { type: "CREATE_SESSION" }
+  | { type: "SESSION_CREATED"; session: Session }
+  | { type: "SWITCH_SESSION"; sessionId: string }
+  | { type: "SESSIONS_LOADED"; sessions: Session[] };
 
 // Actor input for sending messages
 export interface SendMessageInput {
   message: string;
+  sessionId: string | null;
 }
 
 // Actor for sending messages to the API
@@ -51,7 +75,10 @@ const sendMessageActor = fromPromise<ChatAPIResponse, SendMessageInput>(
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input.message }),
+      body: JSON.stringify({
+        message: input.message,
+        sessionId: input.sessionId,
+      }),
     });
 
     if (!res.ok) {
@@ -63,6 +90,37 @@ const sendMessageActor = fromPromise<ChatAPIResponse, SendMessageInput>(
   }
 );
 
+// Actor for creating new sessions
+const createSessionActor = fromPromise<Session, void>(
+  async () => {
+    const res = await fetch("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    return SessionSchema.parse(data);
+  }
+);
+
+// Actor for loading sessions
+const loadSessionsActor = fromPromise<Session[], void>(
+  async () => {
+    const res = await fetch("/api/sessions");
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    return SessionsResponseSchema.parse(data).sessions;
+  }
+);
+
 export const chatMachine = setup({
   types: {
     context: {} as ChatMachineContext,
@@ -71,12 +129,16 @@ export const chatMachine = setup({
   },
   actors: {
     sendMessage: sendMessageActor,
+    createSession: createSessionActor,
+    loadSessions: loadSessionsActor,
   },
 }).createMachine({
   id: "chat",
   initial: "disconnected",
   context: ({ input }) => ({
-    chatHistory: [],
+    sessions: [],
+    currentSessionId: null,
+    sessionChatHistories: new Map(),
     selectedMessageIndex: null,
     currentLogs: [],
     error: null,
@@ -88,6 +150,44 @@ export const chatMachine = setup({
         WEBSOCKET_CONNECTED: {
           target: "idle",
           actions: assign({ error: null }),
+        },
+        WEBSOCKET_MESSAGE: {
+          actions: assign({
+            sessions: ({ context, event }) => {
+              try {
+                const parsed = JSON.parse(event.data);
+                const validated = WebSocketMessageSchema.parse(parsed);
+
+                // If connection message includes sessions, update sessions
+                if (validated.type === "connection" && validated.sessions) {
+                  return validated.sessions;
+                }
+              } catch (e) {
+                console.error("Failed to parse WebSocket message:", e);
+              }
+              return context.sessions;
+            },
+            currentSessionId: ({ context, event }) => {
+              try {
+                const parsed = JSON.parse(event.data);
+                const validated = WebSocketMessageSchema.parse(parsed);
+
+                // If connection message includes sessions, set current session
+                if (validated.type === "connection" && validated.sessions) {
+                  // Set current session to first available if not set
+                  if (!context.currentSessionId && validated.sessions.length > 0) {
+                    const firstSession = validated.sessions[0];
+                    if (firstSession) {
+                      return firstSession.id;
+                    }
+                  }
+                }
+              } catch (e) {
+                console.error("Failed to parse WebSocket message:", e);
+              }
+              return context.currentSessionId;
+            },
+          }),
         },
         WEBSOCKET_ERROR: {
           actions: assign({
@@ -104,12 +204,29 @@ export const chatMachine = setup({
             assign({
               currentLogs: [],
               error: null,
-              chatHistory: ({ context, event }) => [
-                ...context.chatHistory,
-                { role: "user" as const, content: event.message },
-              ],
+              sessionChatHistories: ({ context, event }) => {
+                const sessionId = context.currentSessionId;
+                if (!sessionId) return context.sessionChatHistories;
+
+                const history = context.sessionChatHistories.get(sessionId) || [];
+                const updated = new Map(context.sessionChatHistories);
+                updated.set(sessionId, [
+                  ...history,
+                  { role: "user" as const, content: event.message },
+                ]);
+                return updated;
+              },
             }),
           ],
+        },
+        CREATE_SESSION: {
+          target: "creatingSession",
+        },
+        SWITCH_SESSION: {
+          actions: assign({
+            currentSessionId: ({ event }) => event.sessionId,
+            selectedMessageIndex: null,
+          }),
         },
         WEBSOCKET_DISCONNECTED: {
           target: "disconnected",
@@ -117,6 +234,44 @@ export const chatMachine = setup({
         WEBSOCKET_ERROR: {
           actions: assign({
             error: ({ event }) => event.error,
+          }),
+        },
+        WEBSOCKET_MESSAGE: {
+          actions: assign({
+            sessions: ({ context, event }) => {
+              try {
+                const parsed = JSON.parse(event.data);
+                const validated = WebSocketMessageSchema.parse(parsed);
+
+                // If connection message includes sessions, update sessions
+                if (validated.type === "connection" && validated.sessions) {
+                  return validated.sessions;
+                }
+              } catch (e) {
+                // Ignore parse errors (could be log messages)
+              }
+              return context.sessions;
+            },
+            currentSessionId: ({ context, event }) => {
+              try {
+                const parsed = JSON.parse(event.data);
+                const validated = WebSocketMessageSchema.parse(parsed);
+
+                // If connection message includes sessions, set current session
+                if (validated.type === "connection" && validated.sessions) {
+                  // Set current session to first available if not set
+                  if (!context.currentSessionId && validated.sessions.length > 0) {
+                    const firstSession = validated.sessions[0];
+                    if (firstSession) {
+                      return firstSession.id;
+                    }
+                  }
+                }
+              } catch (e) {
+                // Ignore parse errors (could be log messages)
+              }
+              return context.currentSessionId;
+            },
           }),
         },
         SELECT_MESSAGE: {
@@ -131,28 +286,63 @@ export const chatMachine = setup({
         },
       },
     },
+    creatingSession: {
+      invoke: {
+        id: "createSession",
+        src: "createSession",
+        onDone: {
+          target: "idle",
+          actions: [
+            assign({
+              sessions: ({ context, event }) => [
+                ...context.sessions,
+                event.output,
+              ],
+              currentSessionId: ({ event }) => event.output.id,
+            }),
+          ],
+        },
+        onError: {
+          target: "idle",
+          actions: assign({
+            error: ({ event }) => `Failed to create session: ${event.error}`,
+          }),
+        },
+      },
+    },
     sending: {
       invoke: {
         id: "sendMessage",
         src: "sendMessage",
-        input: ({ event }) => {
+        input: ({ context, event }) => {
           if (event.type !== "SEND_MESSAGE") {
             throw new Error("Invalid event type");
           }
-          return { message: event.message };
+          return {
+            message: event.message,
+            sessionId: context.currentSessionId,
+          };
         },
         onDone: {
           target: "idle",
           actions: [
             assign({
-              chatHistory: ({ context, event }) => [
-                ...context.chatHistory,
-                {
-                  role: "assistant" as const,
-                  content: event.output.response,
-                  logs: event.output.logs || [],
-                },
-              ],
+              sessionChatHistories: ({ context, event }) => {
+                const sessionId = event.output.sessionId || context.currentSessionId;
+                if (!sessionId) return context.sessionChatHistories;
+
+                const history = context.sessionChatHistories.get(sessionId) || [];
+                const updated = new Map(context.sessionChatHistories);
+                updated.set(sessionId, [
+                  ...history,
+                  {
+                    role: "assistant" as const,
+                    content: event.output.response,
+                    logs: event.output.logs || [],
+                  },
+                ]);
+                return updated;
+              },
               currentLogs: [],
             }),
           ],
@@ -161,14 +351,22 @@ export const chatMachine = setup({
           target: "idle",
           actions: [
             assign({
-              chatHistory: ({ context, event }) => [
-                ...context.chatHistory,
-                {
-                  role: "assistant" as const,
-                  content: `Error: ${event.error}`,
-                  logs: [],
-                },
-              ],
+              sessionChatHistories: ({ context, event }) => {
+                const sessionId = context.currentSessionId;
+                if (!sessionId) return context.sessionChatHistories;
+
+                const history = context.sessionChatHistories.get(sessionId) || [];
+                const updated = new Map(context.sessionChatHistories);
+                updated.set(sessionId, [
+                  ...history,
+                  {
+                    role: "assistant" as const,
+                    content: `Error: ${event.error}`,
+                    logs: [],
+                  },
+                ]);
+                return updated;
+              },
               currentLogs: [],
               error: ({ event }) => String(event.error),
             }),
@@ -180,8 +378,18 @@ export const chatMachine = setup({
           actions: assign({
             currentLogs: ({ context, event }) => {
               try {
-                const validated = WebSocketMessageSchema.parse(event.data);
-                return [...context.currentLogs, validated];
+                const parsed = JSON.parse(event.data);
+                const validated = WebSocketMessageSchema.parse(parsed);
+
+                // Only add logs for the current session
+                if (
+                  validated.type === "log" &&
+                  validated.sessionId === context.currentSessionId &&
+                  validated.data
+                ) {
+                  return [...context.currentLogs, validated.data];
+                }
+                return context.currentLogs;
               } catch {
                 return context.currentLogs;
               }

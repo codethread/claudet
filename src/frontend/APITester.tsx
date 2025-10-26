@@ -53,20 +53,47 @@ export function APITester() {
     messageInputRef.current!.value = "";
   };
 
-  const { chatHistory, selectedMessageIndex, currentLogs } = state.context;
+  const { sessionChatHistories, currentSessionId, selectedMessageIndex, currentLogs, sessions } = state.context;
   const isConnected = state.matches("idle") || state.matches("sending");
   const isLoading = state.matches("sending");
+  const chatHistory = currentSessionId ? sessionChatHistories.get(currentSessionId) || [] : [];
   const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
 
   return (
     <div className="h-full w-full text-left flex flex-col lg:flex-row gap-4 sm:gap-4">
       {/* Chat Panel */}
       <div className="flex-1 flex flex-col gap-4 sm:gap-4 min-h-0 pb-safe">
-        <div className="flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center justify-between flex-shrink-0 gap-4">
           <h2 className="text-lg sm:text-xl font-semibold">Chat with Claude</h2>
-          <div className={cn("text-xs flex items-center gap-2 sm:gap-2", isConnected ? "text-green-600" : "text-red-600")}>
-            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-green-600" : "bg-red-600")} />
-            <span className="hidden sm:inline">{isConnected ? "Connected" : "Disconnected"}</span>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Session Selector */}
+            <div className="flex items-center gap-2">
+              <select
+                value={currentSessionId || ""}
+                onChange={(e) => send({ type: "SWITCH_SESSION", sessionId: e.target.value })}
+                className="text-xs border border-input rounded px-2 py-1 bg-background"
+                disabled={!isConnected}
+              >
+                {sessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    Session {session.id.substring(0, 8)}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => send({ type: "CREATE_SESSION" })}
+                disabled={!isConnected || state.matches("creatingSession")}
+                className="text-xs"
+              >
+                + New
+              </Button>
+            </div>
+            <div className={cn("text-xs flex items-center gap-2 sm:gap-2", isConnected ? "text-green-600" : "text-red-600")}>
+              <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-green-600" : "bg-red-600")} />
+              <span className="hidden sm:inline">{isConnected ? "Connected" : "Disconnected"}</span>
+            </div>
           </div>
         </div>
 

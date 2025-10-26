@@ -33,6 +33,7 @@ export type ClaudeMessageData = z.infer<typeof ClaudeMessageDataSchema>;
 
 // Machine context
 export interface ClaudeRunnerContext {
+  sessionId?: string; // Optional session ID for tracking multiple sessions
   processHandle: {
     stdin: any; // Bun.FileSink
     stdout: ReadableStream;
@@ -76,7 +77,10 @@ const createStartClaudeProcessActor = (service: ClaudeCodeService) =>
  * Factory function to create the Claude runner machine with dependency injection
  * @param service - The ClaudeCodeService implementation (real or fake)
  */
-export function createClaudeRunnerMachine(service: ClaudeCodeService) {
+export function createClaudeRunnerMachine(
+  service: ClaudeCodeService,
+  sessionId?: string
+) {
   return setup({
     types: {
       context: {} as ClaudeRunnerContext,
@@ -89,6 +93,7 @@ export function createClaudeRunnerMachine(service: ClaudeCodeService) {
   id: "claudeRunner",
   initial: "idle",
   context: {
+    sessionId,
     processHandle: null,
     pendingRequests: new Map(),
     sessionLogs: new Map(),
@@ -155,10 +160,16 @@ export function createClaudeRunnerMachine(service: ClaudeCodeService) {
           actions: ({ context, event }) => {
             const line = event.line;
 
-            // Broadcast to WebSocket clients
+            // Broadcast to WebSocket clients with session ID
             for (const client of context.logClients) {
               try {
-                client.send(line);
+                // Wrap the message with session metadata
+                const message = JSON.stringify({
+                  type: "log",
+                  sessionId: context.sessionId,
+                  data: line,
+                });
+                client.send(message);
               } catch (e) {
                 console.error("Failed to send to client:", e);
                 context.logClients.delete(client);
