@@ -10,6 +10,7 @@ export const MessageSchema = z.object({
 
 export const SessionSchema = z.object({
   id: z.string(),
+  model: z.string(),
   createdAt: z.string(),
 });
 
@@ -43,6 +44,7 @@ export interface ChatMachineContext {
   sessionChatHistories: Map<string, Message[]>;
   selectedMessageIndex: number | null;
   currentLogs: string[];
+  selectedModel: string;
   error: string | null;
 }
 
@@ -58,6 +60,7 @@ export type ChatMachineEvent =
   | { type: "SELECT_MESSAGE"; index: number }
   | { type: "DESELECT_MESSAGE" }
   | { type: "CLEAR_ERROR" }
+  | { type: "SELECT_MODEL"; model: string }
   | { type: "CREATE_SESSION" }
   | { type: "SESSION_CREATED"; session: Session }
   | { type: "SWITCH_SESSION"; sessionId: string }
@@ -90,12 +93,18 @@ const sendMessageActor = fromPromise<ChatAPIResponse, SendMessageInput>(
   }
 );
 
+// Actor input for creating sessions
+export interface CreateSessionInput {
+  model?: string;
+}
+
 // Actor for creating new sessions
-const createSessionActor = fromPromise<Session, void>(
-  async () => {
+const createSessionActor = fromPromise<Session, CreateSessionInput>(
+  async ({ input }) => {
     const res = await fetch("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: input.model }),
     });
 
     if (!res.ok) {
@@ -141,6 +150,7 @@ export const chatMachine = setup({
     sessionChatHistories: new Map(),
     selectedMessageIndex: null,
     currentLogs: [],
+    selectedModel: "haiku",
     error: null,
     ...input,
   }),
@@ -219,6 +229,11 @@ export const chatMachine = setup({
             }),
           ],
         },
+        SELECT_MODEL: {
+          actions: assign({
+            selectedModel: ({ event }) => event.model,
+          }),
+        },
         CREATE_SESSION: {
           target: "creatingSession",
         },
@@ -290,6 +305,7 @@ export const chatMachine = setup({
       invoke: {
         id: "createSession",
         src: "createSession",
+        input: ({ context }) => ({ model: context.selectedModel }),
         onDone: {
           target: "idle",
           actions: [

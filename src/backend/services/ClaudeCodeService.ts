@@ -12,10 +12,22 @@ export interface ClaudeProcessHandle {
   stderr: ReadableStream<Uint8Array>;
 }
 
+export type ClaudeModel = "haiku" | "sonnet";
+
 export interface ClaudeCodeService {
   /**
    * Spawn a Claude Code CLI process (or mock equivalent)
    * Returns handles to stdin, stdout, stderr streams
+   * @param model - The Claude model to use (haiku, sonnet, or opus)
    */
-  spawn(): ClaudeProcessHandle;
+  spawn(model: ClaudeModel): ClaudeProcessHandle;
+}
+
+/**
+ * Get the default model based on NODE_ENV
+ * Production: sonnet (more capable)
+ * Development: haiku (faster, cheaper)
+ */
+export function getDefaultModel(): ClaudeModel {
+  return process.env.NODE_ENV === "production" ? "sonnet" : "haiku";
 }

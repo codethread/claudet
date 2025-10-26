@@ -64,7 +64,7 @@ async function readSessionOutput(sessionId: string) {
     }
 
     // Wait a bit for process handle to be ready
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const context = session.actor.getSnapshot().context;
     if (!context.processHandle) {
@@ -110,7 +110,10 @@ async function readSessionOutput(sessionId: string) {
 }
 
 // Function to send a message to a specific Claude session
-async function sendToClaude(sessionId: string, message: string): Promise<ClaudeResponse> {
+async function sendToClaude(
+  sessionId: string,
+  message: string,
+): Promise<ClaudeResponse> {
   const session = sessionManager.getSession(sessionId);
   if (!session) {
     throw new Error(`Session ${sessionId} not found`);
@@ -141,7 +144,11 @@ async function sendToClaude(sessionId: string, message: string): Promise<ClaudeR
         attempts++;
         setTimeout(checkRequest, 10);
       } else {
-        reject(new Error("Failed to create request - pending request not found after multiple attempts"));
+        reject(
+          new Error(
+            "Failed to create request - pending request not found after multiple attempts",
+          ),
+        );
       }
     };
 
@@ -200,7 +207,11 @@ export function startServer(options: StartServerOptions = {}) {
           JSON.stringify({
             type: "connection",
             status: "connected",
-            sessions: sessions.map(s => ({ id: s.id, createdAt: s.createdAt })),
+            sessions: sessions.map((s) => ({
+              id: s.id,
+              model: s.model,
+              createdAt: s.createdAt,
+            })),
             timestamp: new Date().toISOString(),
           }),
         );
@@ -244,26 +255,16 @@ export function startServer(options: StartServerOptions = {}) {
       // Serve index.html for all unmatched routes.
       "/*": index,
 
-      "/api/hello": {
+      "/api/models": {
         async GET(req) {
+          const { getDefaultModel } = await import(
+            "./services/ClaudeCodeService"
+          );
           return Response.json({
-            message: "Hello, world!",
-            method: "GET",
+            models: ["haiku", "sonnet"],
+            default: getDefaultModel(),
           });
         },
-        async PUT(req) {
-          return Response.json({
-            message: "Hello, world!",
-            method: "PUT",
-          });
-        },
-      },
-
-      "/api/hello/:name": async (req) => {
-        const name = req.params.name;
-        return Response.json({
-          message: `Hello, ${name}!`,
-        });
       },
 
       "/api/sessions": {
@@ -271,24 +272,32 @@ export function startServer(options: StartServerOptions = {}) {
           try {
             const sessions = sessionManager.listSessions();
             return Response.json({
-              sessions: sessions.map(s => ({
+              sessions: sessions.map((s) => ({
                 id: s.id,
+                model: s.model,
                 createdAt: s.createdAt,
               })),
             });
           } catch (error) {
             console.error("Error in GET /api/sessions:", error);
             return Response.json(
-              { error: error instanceof Error ? error.message : "Unknown error" },
+              {
+                error: error instanceof Error ? error.message : "Unknown error",
+              },
               { status: 500 },
             );
           }
         },
         async POST(req) {
           try {
-            const session = sessionManager.createSession();
+            const body = await req.json().catch(() => ({}));
+            const model = body.model; // Optional: "haiku", "sonnet", or "opus"
+
+            const session = sessionManager.createSession(model);
             session.actor.send({ type: "START_PROCESS" });
-            console.log(`🤖 New Claude session created: ${session.id}`);
+            console.log(
+              `🤖 New Claude session created: ${session.id} (model: ${session.model})`,
+            );
 
             // Start reading output for this new session
             setTimeout(() => {
@@ -297,12 +306,15 @@ export function startServer(options: StartServerOptions = {}) {
 
             return Response.json({
               id: session.id,
+              model: session.model,
               createdAt: session.createdAt,
             });
           } catch (error) {
             console.error("Error in POST /api/sessions:", error);
             return Response.json(
-              { error: error instanceof Error ? error.message : "Unknown error" },
+              {
+                error: error instanceof Error ? error.message : "Unknown error",
+              },
               { status: 500 },
             );
           }
@@ -330,7 +342,10 @@ export function startServer(options: StartServerOptions = {}) {
               targetSessionId = defaultSession.id;
             }
 
-            const { response, logs } = await sendToClaude(targetSessionId, message);
+            const { response, logs } = await sendToClaude(
+              targetSessionId,
+              message,
+            );
 
             return Response.json({
               response,
@@ -341,32 +356,12 @@ export function startServer(options: StartServerOptions = {}) {
           } catch (error) {
             console.error("Error in /api/chat:", error);
             return Response.json(
-              { error: error instanceof Error ? error.message : "Unknown error" },
+              {
+                error: error instanceof Error ? error.message : "Unknown error",
+              },
               { status: 500 },
             );
           }
-        },
-      },
-
-      "/api/greet": {
-        async GET(req) {
-          const proc = Bun.spawn(
-            ["claude", "--print", "--model=haiku", "Say hello"],
-            {
-              stdout: "pipe",
-              stderr: "pipe",
-            },
-          );
-
-          const output = await new Response(proc.stdout).text();
-          const error = await new Response(proc.stderr).text();
-          await proc.exited;
-
-          return Response.json({
-            output,
-            error,
-            exitCode: proc.exitCode,
-          });
         },
       },
     },

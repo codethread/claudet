@@ -1,32 +1,36 @@
-import type { ClaudeCodeService, ClaudeProcessHandle } from "./ClaudeCodeService";
+import type { ClaudeCodeService, ClaudeProcessHandle, ClaudeModel } from "./ClaudeCodeService";
 
 /**
  * RealClaudeCodeService - Production implementation using actual Claude CLI
  *
  * Spawns the Claude Code CLI with appropriate flags for JSON streaming.
+ * Respects CLAUDE_DIR environment variable to set working directory.
  */
 export class RealClaudeCodeService implements ClaudeCodeService {
-  spawn(): ClaudeProcessHandle {
-    const process = Bun.spawn(
+  spawn(model: ClaudeModel): ClaudeProcessHandle {
+    const claudeDir = process.env.CLAUDE_DIR;
+
+    const claudeProcess = Bun.spawn(
       [
         "claude",
         "--print",
         "--verbose",
         "--input-format=stream-json",
         "--output-format=stream-json",
-        "--model=haiku",
+        `--model=${model}`,
       ],
       {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
+        ...(claudeDir && { cwd: claudeDir }),
       },
     );
 
     return {
-      stdin: process.stdin,
-      stdout: process.stdout,
-      stderr: process.stderr,
+      stdin: claudeProcess.stdin,
+      stdout: claudeProcess.stdout,
+      stderr: claudeProcess.stderr,
     };
   }
 }

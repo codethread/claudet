@@ -53,11 +53,22 @@ export function APITester() {
     messageInputRef.current!.value = "";
   };
 
-  const { sessionChatHistories, currentSessionId, selectedMessageIndex, currentLogs, sessions } = state.context;
+  const {
+    sessionChatHistories,
+    currentSessionId,
+    selectedMessageIndex,
+    currentLogs,
+    sessions,
+    selectedModel,
+  } = state.context;
   const isConnected = state.matches("idle") || state.matches("sending");
   const isLoading = state.matches("sending");
-  const chatHistory = currentSessionId ? sessionChatHistories.get(currentSessionId) || [] : [];
-  const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
+  const chatHistory = currentSessionId
+    ? sessionChatHistories.get(currentSessionId) || []
+    : [];
+  const selectedMessage =
+    selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
 
   return (
     <div className="h-full w-full text-left flex flex-col lg:flex-row gap-4 sm:gap-4">
@@ -66,17 +77,45 @@ export function APITester() {
         <div className="flex items-center justify-between flex-shrink-0 gap-4">
           <h2 className="text-lg sm:text-xl font-semibold">Chat with Claude</h2>
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* Model Selector */}
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="model-select"
+                className="text-xs text-muted-foreground hidden sm:inline"
+              >
+                Model:
+              </label>
+              <select
+                id="model-select"
+                value={selectedModel}
+                onChange={(e) =>
+                  send({ type: "SELECT_MODEL", model: e.target.value })
+                }
+                className="text-xs border border-input rounded px-2 py-1 bg-background"
+                disabled={!isConnected}
+              >
+                <option value="haiku">Haiku</option>
+                <option value="sonnet">Sonnet</option>
+              </select>
+            </div>
             {/* Session Selector */}
             <div className="flex items-center gap-2">
               <select
                 value={currentSessionId || ""}
-                onChange={(e) => send({ type: "SWITCH_SESSION", sessionId: e.target.value })}
+                onChange={(e) =>
+                  send({ type: "SWITCH_SESSION", sessionId: e.target.value })
+                }
                 className="text-xs border border-input rounded px-2 py-1 bg-background"
                 disabled={!isConnected}
+                title={
+                  currentSession
+                    ? `Session: ${currentSession.id.substring(0, 8)} (${currentSession.model})`
+                    : ""
+                }
               >
                 {sessions.map((session) => (
                   <option key={session.id} value={session.id}>
-                    Session {session.id.substring(0, 8)}
+                    {session.id.substring(0, 8)} ({session.model})
                   </option>
                 ))}
               </select>
@@ -90,9 +129,21 @@ export function APITester() {
                 + New
               </Button>
             </div>
-            <div className={cn("text-xs flex items-center gap-2 sm:gap-2", isConnected ? "text-green-600" : "text-red-600")}>
-              <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-green-600" : "bg-red-600")} />
-              <span className="hidden sm:inline">{isConnected ? "Connected" : "Disconnected"}</span>
+            <div
+              className={cn(
+                "text-xs flex items-center gap-2 sm:gap-2",
+                isConnected ? "text-green-600" : "text-red-600",
+              )}
+            >
+              <div
+                className={cn(
+                  "w-2 h-2 rounded-full",
+                  isConnected ? "bg-green-600" : "bg-red-600",
+                )}
+              />
+              <span className="hidden sm:inline">
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
             </div>
           </div>
         </div>
@@ -100,18 +151,28 @@ export function APITester() {
         {/* Chat History */}
         <div className="flex-1 bg-card border border-input rounded-xl p-3 sm:p-4 overflow-y-auto min-h-0">
           {chatHistory.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Send a message to start chatting...</p>
+            <p className="text-muted-foreground text-sm">
+              Send a message to start chatting...
+            </p>
           ) : (
             <div className="flex flex-col gap-4">
               {chatHistory.map((msg, i) => (
                 <div
                   key={i}
-                  onClick={() => msg.role === "assistant" && msg.logs ? send({ type: "SELECT_MESSAGE", index: i }) : null}
+                  onClick={() =>
+                    msg.role === "assistant" && msg.logs
+                      ? send({ type: "SELECT_MESSAGE", index: i })
+                      : null
+                  }
                   className={cn(
                     "p-3 sm:p-3 rounded-lg",
-                    msg.role === "user" ? "bg-primary/10 ml-4 sm:ml-8" : "bg-muted mr-4 sm:mr-8",
-                    msg.role === "assistant" && msg.logs && "cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all",
-                    selectedMessageIndex === i && "ring-2 ring-primary"
+                    msg.role === "user"
+                      ? "bg-primary/10 ml-4 sm:ml-8"
+                      : "bg-muted mr-4 sm:mr-8",
+                    msg.role === "assistant" &&
+                      msg.logs &&
+                      "cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all",
+                    selectedMessageIndex === i && "ring-2 ring-primary",
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -124,13 +185,19 @@ export function APITester() {
                       </div>
                     )}
                   </div>
-                  <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                  <div className="text-sm whitespace-pre-wrap">
+                    {msg.content}
+                  </div>
                 </div>
               ))}
               {isLoading && (
                 <div className="p-3 sm:p-3 rounded-lg bg-muted mr-4 sm:mr-8">
-                  <div className="text-xs font-semibold mb-1 text-muted-foreground">Claude</div>
-                  <div className="text-sm text-muted-foreground">Thinking...</div>
+                  <div className="text-xs font-semibold mb-1 text-muted-foreground">
+                    Claude
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Thinking...
+                  </div>
                   {currentLogs.length > 0 && (
                     <div className="text-[10px] text-muted-foreground mt-1">
                       {currentLogs.length} logs captured
@@ -143,11 +210,16 @@ export function APITester() {
         </div>
 
         {/* Chat Input */}
-        <form onSubmit={sendMessage} className="flex gap-2 sm:gap-2 flex-shrink-0">
+        <form
+          onSubmit={sendMessage}
+          className="flex gap-2 sm:gap-2 flex-shrink-0"
+        >
           <Input
             ref={messageInputRef}
             type="text"
-            placeholder={isConnected ? "Type your message..." : "Waiting for connection..."}
+            placeholder={
+              isConnected ? "Type your message..." : "Waiting for connection..."
+            }
             className="flex-1"
             disabled={isLoading || !isConnected}
           />
@@ -162,7 +234,11 @@ export function APITester() {
         <div className="w-full lg:w-[500px] flex flex-col gap-4 sm:gap-4 animate-in slide-in-from-right duration-200 min-h-0 lg:min-h-full">
           <div className="flex items-center justify-between">
             <h2 className="text-lg sm:text-xl font-semibold">Message Logs</h2>
-            <Button variant="ghost" size="sm" onClick={() => send({ type: "DESELECT_MESSAGE" })}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => send({ type: "DESELECT_MESSAGE" })}
+            >
               ✕
             </Button>
           </div>
@@ -177,9 +253,13 @@ export function APITester() {
                   try {
                     const parsed = JSON.parse(log);
                     return (
-                      <div key={i} className="border-l-2 border-primary/30 pl-2">
+                      <div
+                        key={i}
+                        className="border-l-2 border-primary/30 pl-2"
+                      >
                         <div className="text-primary/60 text-[10px] mb-1">
-                          {parsed.type || "unknown"}{parsed.subtype ? ` (${parsed.subtype})` : ""}
+                          {parsed.type || "unknown"}
+                          {parsed.subtype ? ` (${parsed.subtype})` : ""}
                         </div>
                         <pre className="text-muted-foreground overflow-x-auto whitespace-pre">
                           {JSON.stringify(parsed, null, 2)}
@@ -189,7 +269,10 @@ export function APITester() {
                   } catch {
                     // Not JSON, display as-is
                     return (
-                      <div key={i} className="text-muted-foreground overflow-x-auto whitespace-pre">
+                      <div
+                        key={i}
+                        className="text-muted-foreground overflow-x-auto whitespace-pre"
+                      >
                         {log}
                       </div>
                     );

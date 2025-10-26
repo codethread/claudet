@@ -7,6 +7,7 @@
     "dev": "bun --hot src/backend/index.tsx",
     "dev:test": "bun --hot src/backend/index.test-server.tsx",
     "start": "NODE_ENV=production bun src/backend/index.tsx",
+    "start:notes": "CLAUDE_DIR=/Users/codethread/dev/Vault NODE_ENV=production bun src/backend/index.tsx",
     "build": "bun scripts/build.ts",
     "generate:icons": "bun scripts/generate-pwa-icons.js",
     "validate": "bun run type-check && bun run test && bun run test:e2e && bun run build",

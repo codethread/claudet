@@ -1,11 +1,14 @@
 import { createActor, type Actor } from "xstate";
 import { createClaudeRunnerMachine, type ClaudeRunnerMachine } from "./claudeRunner";
 import type { ClaudeCodeService } from "./services";
+import type { ClaudeModel } from "./services/ClaudeCodeService";
+import { getDefaultModel } from "./services/ClaudeCodeService";
 import { randomUUID } from "crypto";
 
 export interface Session {
   id: string;
   actor: Actor<ClaudeRunnerMachine>;
+  model: ClaudeModel;
   createdAt: Date;
 }
 
@@ -16,16 +19,19 @@ export class SessionManager {
 
   /**
    * Creates a new Claude CLI session
+   * @param model - Optional model to use (defaults to environment-based default)
    */
-  createSession(): Session {
+  createSession(model?: ClaudeModel): Session {
     const id = randomUUID();
-    const machine = createClaudeRunnerMachine(this.service, id);
+    const selectedModel = model || getDefaultModel();
+    const machine = createClaudeRunnerMachine(this.service, id, selectedModel);
     const actor = createActor(machine);
     actor.start();
 
     const session: Session = {
       id,
       actor,
+      model: selectedModel,
       createdAt: new Date(),
     };
 
@@ -43,9 +49,10 @@ export class SessionManager {
   /**
    * Lists all sessions
    */
-  listSessions(): Array<{ id: string; createdAt: Date }> {
+  listSessions(): Array<{ id: string; model: ClaudeModel; createdAt: Date }> {
     return Array.from(this.sessions.values()).map((session) => ({
       id: session.id,
+      model: session.model,
       createdAt: session.createdAt,
     }));
   }

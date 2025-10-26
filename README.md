@@ -4,14 +4,17 @@ A full-stack web application that provides an interactive chat interface for Cla
 
 ## Features
 
-- 🤖 **Claude CLI Integration** - Persistent Claude Code session with streaming JSON I/O
+- 🤖 **Claude CLI Integration** - Persistent Claude Code session with streaming JSON I/O and dependency injection
+- 🎭 **XState State Machine** - Robust process lifecycle management for Claude CLI
 - 📱 **Progressive Web App** - Installable on mobile devices with offline support
 - 🔒 **HTTPS Development** - Secure local development with TLS certificates
 - 📲 **Mobile-First Design** - Responsive UI with safe area utilities for iOS devices
 - ⚡ **Hot Module Reloading** - Fast development with Bun's built-in HMR
 - 🎨 **Modern UI** - Built with shadcn/ui components and Tailwind CSS 4
+- 🌓 **Dark Mode** - Light, dark, and system theme support with FOUC prevention
 - 🔌 **WebSocket Streaming** - Real-time log streaming from Claude process
 - 📦 **Zero Config** - All-in-one Bun runtime (no separate bundler needed)
+- 🧪 **Comprehensive Testing** - Unit tests with Bun and E2E tests with Playwright
 
 ## Prerequisites
 
@@ -67,6 +70,7 @@ Production builds are output to the `dist/` folder with:
 
 ## Documentation
 
+- [Architecture Guide](docs/architecture.md) - Complete architecture, project structure, and technology stack
 - [Bun Guidelines](docs/bun.md) - Comprehensive Bun-specific development guidelines and best practices
 - [CLAUDE.md](CLAUDE.md) - Project instructions for Claude Code AI assistant
 
@@ -78,77 +82,23 @@ Production builds are output to the `dist/` folder with:
 | `bun start` | Run production server |
 | `bun run build` | Build for production to `dist/` folder |
 | `bun run generate:icons` | Generate PWA icon files from `src/assets/icon.svg` |
-| `bun test` | Run tests with Bun's built-in test runner |
+| `bun test` | Run unit tests with Bun's built-in test runner |
 | `bun test <file>` | Run specific test file |
 | `bun test --test-name-pattern "<pattern>"` | Run tests matching pattern |
+| `bun run test:e2e` | Run E2E tests with Playwright (headless) |
+| `bun run test:e2e:ui` | Run E2E tests with Playwright UI |
+| `bun run test:e2e:headed` | Run E2E tests with visible browser |
+| `npx playwright show-report` | View latest Playwright test report |
 
-## Project Structure
+## Architecture
 
-```
-src/
-├── index.tsx              # Bun server entry point (routing, WebSockets, Claude CLI)
-├── index.html             # HTML entry with React imports
-├── frontend.tsx           # React root component
-├── App.tsx                # Main application component
-├── APITester.tsx          # Chat interface component
-├── index.css              # Main CSS with Tailwind + mobile utilities
-├── manifest.json          # PWA manifest
-├── sw.js                  # Service worker for offline support
-├── components/ui/         # shadcn/ui components
-├── lib/utils.ts           # Utility functions
-└── assets/                # Icons and images
+For complete details on the project architecture, technology stack, project structure, and development patterns, see the [Architecture Guide](docs/architecture.md).
 
-scripts/
-├── build.ts               # Production build script
-└── generate-pwa-icons.js  # Icon generation from SVG
-
-docs/
-└── bun.md                 # Bun best practices guide
-
-certs/
-├── localhost+3.pem        # HTTPS certificate
-└── localhost+3-key.pem    # HTTPS private key
-```
-
-## Technology Stack
-
-- **Runtime:** [Bun](https://bun.sh) - All-in-one JavaScript runtime
-- **Framework:** [React 19](https://react.dev/) - UI library
-- **Styling:** [Tailwind CSS 4](https://tailwindcss.com/) - Utility-first CSS framework
-- **Components:** [shadcn/ui](https://ui.shadcn.com/) - Re-usable components built with Radix UI
-- **AI Integration:** Claude Code CLI - Persistent session with streaming I/O
-- **PWA:** Service Worker + Web App Manifest - Offline-first progressive web app
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/*` | GET | Serves `index.html` (SPA fallback) |
-| `/api/chat` | POST | Send messages to Claude CLI |
-| `/api/hello` | GET/PUT | Example API endpoint |
-| `/api/hello/:name` | GET | Dynamic parameter example |
-| `/ws` | WebSocket | Real-time log streaming |
-| `/manifest.json` | GET | PWA manifest |
-| `/sw.js` | GET | Service worker |
-
-## Development Notes
-
-### TypeScript Configuration
-- **Strict mode enabled** with additional safety checks
-- **Module:** "Preserve" with bundler resolution
-- **JSX:** react-jsx (React 19)
-- **Path alias:** `@/*` → `./src/*`
-
-### PWA Support
-- Icons generated from `src/assets/icon.svg`
-- Service worker handles offline caching
-- Installable on iOS and Android devices
-- Safe area utilities for notch/status bar support
-
-### Testing
-- Uses Bun's built-in test runner (not Jest or Vitest)
-- 5-second timeout per test
-- Supports snapshots with `--update-snapshots`
+**Quick Overview**:
+- **Backend**: Bun.serve() with XState 5 state machine managing Claude CLI process
+- **Frontend**: React 19 + Tailwind CSS 4 + shadcn/ui with dark mode support
+- **Testing**: Bun test runner (unit) + Playwright (E2E) with dependency injection for mocking
+- **PWA**: Offline-first with service worker and installable on mobile devices
 
 ## License
 

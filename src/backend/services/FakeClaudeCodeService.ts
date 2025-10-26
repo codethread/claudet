@@ -1,6 +1,7 @@
 import type {
   ClaudeCodeService,
   ClaudeProcessHandle,
+  ClaudeModel,
 } from "./ClaudeCodeService";
 
 /**
@@ -13,6 +14,7 @@ export class FakeClaudeCodeService implements ClaudeCodeService {
   private stdoutController?: ReadableStreamDefaultController<Uint8Array>;
   private stderrController?: ReadableStreamDefaultController<Uint8Array>;
   public receivedMessages: string[] = [];
+  private currentModel?: ClaudeModel;
 
   /**
    * Delay in milliseconds before sending response (simulates API latency)
@@ -36,7 +38,8 @@ export class FakeClaudeCodeService implements ClaudeCodeService {
     ["What is 2 + 2? Please respond with only the number, no explanation.", "4"],
   ]);
 
-  spawn(): ClaudeProcessHandle {
+  spawn(model: ClaudeModel): ClaudeProcessHandle {
+    this.currentModel = model;
     const encoder = new TextEncoder();
 
     // Create controllable stdout stream
@@ -90,8 +93,8 @@ export class FakeClaudeCodeService implements ClaudeCodeService {
       session_id: sessionId,
       uuid: crypto.randomUUID(),
       apiKeySource: "test",
-      cwd: "/fake/path",
-      model: "claude-haiku-fake",
+      cwd: process.env.CLAUDE_DIR || "/fake/path",
+      model: `claude-${this.currentModel}-fake`,
     };
     this.stdoutController.enqueue(
       encoder.encode(JSON.stringify(initMessage) + "\n"),

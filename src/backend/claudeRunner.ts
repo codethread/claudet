@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assign, fromPromise, setup } from "xstate";
-import type { ClaudeCodeService } from "./services/ClaudeCodeService";
+import type { ClaudeCodeService, ClaudeModel } from "./services/ClaudeCodeService";
 
 // Zod Schemas for runtime validation
 export const ClaudeResponseSchema = z.object({
@@ -34,6 +34,7 @@ export type ClaudeMessageData = z.infer<typeof ClaudeMessageDataSchema>;
 // Machine context
 export interface ClaudeRunnerContext {
   sessionId?: string; // Optional session ID for tracking multiple sessions
+  model: ClaudeModel; // The Claude model to use
   processHandle: {
     stdin: any; // Bun.FileSink
     stdout: ReadableStream;
@@ -69,17 +70,20 @@ export type ClaudeRunnerEvent =
 // Factory function for creating the process starter actor
 // This allows dependency injection of the ClaudeCodeService
 const createStartClaudeProcessActor = (service: ClaudeCodeService) =>
-  fromPromise(async () => {
-    return service.spawn();
+  fromPromise(async ({ input }: { input: { model: ClaudeModel } }) => {
+    return service.spawn(input.model);
   });
 
 /**
  * Factory function to create the Claude runner machine with dependency injection
  * @param service - The ClaudeCodeService implementation (real or fake)
+ * @param sessionId - Optional session ID for tracking
+ * @param model - The Claude model to use
  */
 export function createClaudeRunnerMachine(
   service: ClaudeCodeService,
-  sessionId?: string
+  sessionId?: string,
+  model: ClaudeModel = "haiku"
 ) {
   return setup({
     types: {
@@ -94,6 +98,7 @@ export function createClaudeRunnerMachine(
   initial: "idle",
   context: {
     sessionId,
+    model,
     processHandle: null,
     pendingRequests: new Map(),
     sessionLogs: new Map(),
@@ -112,17 +117,25 @@ export function createClaudeRunnerMachine(
       invoke: {
         id: "startProcess",
         src: "startProcess",
+        input: ({ context }) => ({ model: context.model }),
         onDone: {
           target: "running",
           actions: assign({
-            processHandle: ({ event }) => event.output,
+            processHandle: ({ event }) => {
+              console.log("✅ Claude process started successfully");
+              return event.output;
+            },
             error: null,
           }),
         },
         onError: {
           target: "error",
           actions: assign({
-            error: ({ event }) => String(event.error),
+            error: ({ event }) => {
+              const errorMsg = String(event.error);
+              console.error("❌ Claude process failed to start:", errorMsg);
+              return errorMsg;
+            },
           }),
         },
       },
