@@ -8,11 +8,14 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { ThemeProvider } from "./components/ThemeProvider";
 
 const elem = document.getElementById("root")!;
 const app = (
   <StrictMode>
-    <App />
+    <ThemeProvider defaultTheme="system" storageKey="claudet-ui-theme">
+      <App />
+    </ThemeProvider>
   </StrictMode>
 );
 

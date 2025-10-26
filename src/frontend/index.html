@@ -26,6 +26,24 @@
     <link rel="manifest" href="./manifest.json" />
 
     <title>Claude Chat</title>
+
+    <!-- Theme initialization - prevents FOUC -->
+    <script>
+      (function () {
+        try {
+          const storageKey = "claudet-ui-theme";
+          const theme = localStorage.getItem(storageKey);
+          const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+          if (theme === "dark" || (theme === "system" && systemPrefersDark) || (!theme && systemPrefersDark)) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          console.error("Theme initialization failed:", e);
+        }
+      })();
+    </script>
+
     <script type="module" src="./frontend.tsx" async></script>
 
     <!-- Service Worker Registration -->

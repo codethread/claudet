@@ -95,6 +95,45 @@ This is a **Bun-native full-stack application** using `Bun.serve()` with routing
 - **PWA Support**: Service worker, manifest, and icon generation
 - Path alias: `@/*` maps to `./src/*`
 
+#### Dark Mode Implementation
+
+The application supports three theme modes: `light`, `dark`, and `system` (follows OS preference).
+
+**Architecture**:
+1. **ThemeProvider** (`src/frontend/components/ThemeProvider.tsx`):
+   - React Context-based theme management using `useState` and `useContext`
+   - Persists preference to `localStorage` with key `claudet-ui-theme`
+   - Applies/removes `.dark` class on `document.documentElement`
+   - Detects system preference via `window.matchMedia("(prefers-color-scheme: dark)")`
+
+2. **FOUC Prevention** (`src/frontend/index.html`):
+   - Inline `<script>` in `<head>` runs before React loads
+   - Synchronously applies `.dark` class based on saved preference
+   - Prevents flash of light theme on page load
+   - Uses same logic as `ThemeProvider` for consistency
+
+3. **ThemeToggle Component** (`src/frontend/components/ThemeToggle.tsx`):
+   - Cycles through: Light → Dark → System → Light
+   - Uses `lucide-react` icons (Sun/Moon/Monitor)
+   - Accessible button with screen reader labels
+
+4. **Tailwind CSS 4 Configuration** (`src/frontend/styles/globals.css`):
+   - Custom variant: `@custom-variant dark (&:is(.dark, .dark *));`
+   - CSS variables for light/dark themes (`:root` and `.dark` selectors)
+   - Use `dark:` prefix in components (e.g., `dark:bg-gray-900`)
+
+**Usage in Components**:
+```typescript
+// Access theme context
+import { useTheme } from "@/components/ThemeProvider";
+const { theme, setTheme } = useTheme();
+
+// Apply dark mode styles with Tailwind
+<div className="bg-white dark:bg-gray-900 text-black dark:text-white">
+  Content
+</div>
+```
+
 ### Build System (scripts/build.ts)
 
 Custom build script with:
@@ -122,14 +161,18 @@ src/
 │       ├── FakeClaudeCodeService.ts      # Test mock implementation
 │       └── FakeClaudeCodeService.test.ts # Mock unit tests
 ├── frontend/
-│   ├── index.html             # HTML entry with React imports
-│   ├── frontend.tsx           # React root component
-│   ├── App.tsx                # Main application component
+│   ├── index.html             # HTML entry with React imports (includes FOUC script)
+│   ├── frontend.tsx           # React root component (wraps with ThemeProvider)
+│   ├── App.tsx                # Main application component (includes ThemeToggle)
 │   ├── APITester.tsx          # Claude API testing UI
 │   ├── chatMachine.ts         # Frontend state machine
 │   ├── chatMachine.test.ts    # Frontend tests
-│   ├── components/ui/         # shadcn/ui components
+│   ├── components/
+│   │   ├── ThemeProvider.tsx  # Dark mode context provider
+│   │   ├── ThemeToggle.tsx    # Theme switcher button
+│   │   └── ui/                # shadcn/ui components
 │   ├── lib/utils.ts           # Utility functions (cn, etc.)
+│   ├── styles/globals.css     # Global styles with dark mode CSS variables
 │   ├── manifest.json          # PWA manifest
 │   └── sw.js                  # Service worker
 
