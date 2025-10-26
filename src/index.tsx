@@ -1,4 +1,3 @@
-import { serve } from "bun";
 import index from "./index.html";
 import qrcode from "qrcode-terminal";
 import { networkInterfaces } from "os";
@@ -13,14 +12,14 @@ function getLocalIP(): string {
 
     for (const net of interfaces) {
       // Skip internal (localhost) and non-IPv4 addresses
-      const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4;
+      const familyV4Value = typeof net.family === "string" ? "IPv4" : 4;
       if (net.family === familyV4Value && !net.internal) {
         return net.address;
       }
     }
   }
 
-  return 'localhost';
+  return "localhost";
 }
 
 // Start a persistent Claude session with streaming JSON I/O
@@ -37,19 +36,22 @@ const claudeProcess = Bun.spawn(
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
-  }
+  },
 );
 
 console.log("🤖 Claude session started");
 
 // Keep track of pending requests
-const pendingRequests = new Map<string, {
-  resolve: (value: string) => void;
-  reject: (error: Error) => void;
-  buffer: string;
-  sessionId?: string;
-  logs: string[];
-}>();
+const pendingRequests = new Map<
+  string,
+  {
+    resolve: (value: string) => void;
+    reject: (error: Error) => void;
+    buffer: string;
+    sessionId?: string;
+    logs: string[];
+  }
+>();
 
 // Track websocket clients for log streaming
 const logClients = new Set<any>();
@@ -78,7 +80,9 @@ async function readClaudeOutput() {
       for (const line of lines) {
         if (!line.trim()) continue;
 
-        console.log(`[Claude Log] ${line.substring(0, 100)}... (clients: ${logClients.size})`);
+        console.log(
+          `[Claude Log] ${line.substring(0, 100)}... (clients: ${logClients.size})`,
+        );
 
         // Broadcast raw log line to all connected websocket clients
         for (const client of logClients) {
@@ -104,7 +108,9 @@ async function readClaudeOutput() {
           // Handle assistant message response
           if (data.type === "assistant" && data.session_id) {
             const requests = Array.from(pendingRequests.values());
-            const pending = requests.find(r => r.sessionId === data.session_id);
+            const pending = requests.find(
+              (r) => r.sessionId === data.session_id,
+            );
 
             if (pending && data.message?.content?.[0]?.text) {
               pending.buffer += data.message.content[0].text;
@@ -113,7 +119,9 @@ async function readClaudeOutput() {
           // Handle result message (final)
           else if (data.type === "result" && data.session_id) {
             const requests = Array.from(pendingRequests.entries());
-            const entry = requests.find(([_, r]) => r.sessionId === data.session_id);
+            const entry = requests.find(
+              ([_, r]) => r.sessionId === data.session_id,
+            );
 
             if (entry) {
               const [messageId, pending] = entry;
@@ -134,7 +142,11 @@ async function readClaudeOutput() {
             }
           }
           // Store session ID from init message
-          else if (data.type === "system" && data.subtype === "init" && data.session_id) {
+          else if (
+            data.type === "system" &&
+            data.subtype === "init" &&
+            data.session_id
+          ) {
             // Find the most recent pending request without a session ID
             for (const pending of pendingRequests.values()) {
               if (!pending.sessionId) {
@@ -157,7 +169,9 @@ async function readClaudeOutput() {
 readClaudeOutput();
 
 // Function to send a message to Claude
-async function sendToClaude(message: string): Promise<{ response: string; logs: string[] }> {
+async function sendToClaude(
+  message: string,
+): Promise<{ response: string; logs: string[] }> {
   const messageId = crypto.randomUUID();
 
   return new Promise((resolve, reject) => {
@@ -175,13 +189,14 @@ async function sendToClaude(message: string): Promise<{ response: string; logs: 
     pendingRequests.set(messageId, request as any);
 
     // Send message in stream-json format
-    const input = JSON.stringify({
-      type: "user",
-      message: {
-        role: "user",
-        content: message,
-      },
-    }) + "\n";
+    const input =
+      JSON.stringify({
+        type: "user",
+        message: {
+          role: "user",
+          content: message,
+        },
+      }) + "\n";
 
     claudeProcess.stdin.write(input);
 
@@ -196,7 +211,7 @@ async function sendToClaude(message: string): Promise<{ response: string; logs: 
   });
 }
 
-const server = serve({
+const server = Bun.serve({
   hostname: "0.0.0.0", // Listen on all network interfaces
   port: 3000,
   tls: {
@@ -207,9 +222,18 @@ const server = serve({
   websocket: {
     open(ws) {
       logClients.add(ws);
-      console.log("✅ WebSocket client connected. Total clients:", logClients.size);
+      console.log(
+        "✅ WebSocket client connected. Total clients:",
+        logClients.size,
+      );
       // Send a test message to confirm connection
-      ws.send(JSON.stringify({ type: "connection", status: "connected", timestamp: new Date().toISOString() }));
+      ws.send(
+        JSON.stringify({
+          type: "connection",
+          status: "connected",
+          timestamp: new Date().toISOString(),
+        }),
+      );
     },
     message(ws, message) {
       console.log("📨 WebSocket received message:", message);
@@ -218,7 +242,10 @@ const server = serve({
     },
     close(ws) {
       logClients.delete(ws);
-      console.log("❌ WebSocket client disconnected. Total clients:", logClients.size);
+      console.log(
+        "❌ WebSocket client disconnected. Total clients:",
+        logClients.size,
+      );
     },
   },
 
@@ -234,7 +261,7 @@ const server = serve({
     },
 
     "/sw.js": Bun.file("./src/sw.js"),
-    "/manifest.json": Bun.file("./src/manifest.json"),
+    "/src/manifest.json": Bun.file("./src/manifest.json"),
     "/logo.svg": Bun.file("./src/assets/logo.svg"),
     "/icon-180.png": Bun.file("./src/assets/icon-180.png"),
     "/icon-192.png": Bun.file("./src/assets/icon-192.png"),
@@ -258,7 +285,7 @@ const server = serve({
       },
     },
 
-    "/api/hello/:name": async req => {
+    "/api/hello/:name": async (req) => {
       const name = req.params.name;
       return Response.json({
         message: `Hello, ${name}!`,
@@ -274,7 +301,7 @@ const server = serve({
           if (!message) {
             return Response.json(
               { error: "Message is required" },
-              { status: 400 }
+              { status: 400 },
             );
           }
 
@@ -289,7 +316,7 @@ const server = serve({
           console.error("Error in /api/chat:", error);
           return Response.json(
             { error: error instanceof Error ? error.message : "Unknown error" },
-            { status: 500 }
+            { status: 500 },
           );
         }
       },
@@ -297,10 +324,13 @@ const server = serve({
 
     "/api/greet": {
       async GET(req) {
-        const proc = Bun.spawn(["claude", "--print", "--model=haiku", "Say hello"], {
-          stdout: "pipe",
-          stderr: "pipe",
-        });
+        const proc = Bun.spawn(
+          ["claude", "--print", "--model=haiku", "Say hello"],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        );
 
         const output = await new Response(proc.stdout).text();
         const error = await new Response(proc.stderr).text();
