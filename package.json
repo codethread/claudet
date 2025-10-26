@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/backend/index.tsx",
+    "dev:test": "bun --hot src/backend/index.test-server.tsx",
     "start": "NODE_ENV=production bun src/backend/index.tsx",
     "build": "bun scripts/build.ts",
     "generate:icons": "bun scripts/generate-pwa-icons.js",
-    "test": "bun test",
+    "test": "bun test src/",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

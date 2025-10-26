@@ -21,7 +21,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'bun dev',
+    command: 'bun dev:test', // Use test server with FakeClaudeCodeService
     url: 'https://localhost:3000',
     reuseExistingServer: !process.env.CI,
     ignoreHTTPSErrors: true,

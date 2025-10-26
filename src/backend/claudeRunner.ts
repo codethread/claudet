@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { assign, fromPromise, setup } from "xstate";
+import type { ClaudeCodeService } from "./services/ClaudeCodeService";
 
 // Zod Schemas for runtime validation
 export const ClaudeResponseSchema = z.object({
@@ -64,40 +65,27 @@ export type ClaudeRunnerEvent =
   | { type: "UNREGISTER_WS_CLIENT"; client: any }
   | { type: "STOP" };
 
-// Actor for starting the Claude process
-const startClaudeProcessActor = fromPromise(async () => {
-  const process = Bun.spawn(
-    [
-      "claude",
-      "--print",
-      "--verbose",
-      "--input-format=stream-json",
-      "--output-format=stream-json",
-      "--model=haiku",
-    ],
-    {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+// Factory function for creating the process starter actor
+// This allows dependency injection of the ClaudeCodeService
+const createStartClaudeProcessActor = (service: ClaudeCodeService) =>
+  fromPromise(async () => {
+    return service.spawn();
+  });
+
+/**
+ * Factory function to create the Claude runner machine with dependency injection
+ * @param service - The ClaudeCodeService implementation (real or fake)
+ */
+export function createClaudeRunnerMachine(service: ClaudeCodeService) {
+  return setup({
+    types: {
+      context: {} as ClaudeRunnerContext,
+      events: {} as ClaudeRunnerEvent,
     },
-  );
-
-  return {
-    stdin: process.stdin,
-    stdout: process.stdout,
-    stderr: process.stderr,
-  };
-});
-
-export const claudeRunnerMachine = setup({
-  types: {
-    context: {} as ClaudeRunnerContext,
-    events: {} as ClaudeRunnerEvent,
-  },
-  actors: {
-    startProcess: startClaudeProcessActor,
-  },
-}).createMachine({
+    actors: {
+      startProcess: createStartClaudeProcessActor(service),
+    },
+  }).createMachine({
   id: "claudeRunner",
   initial: "idle",
   context: {
@@ -284,6 +272,15 @@ export const claudeRunnerMachine = setup({
       type: "final",
     },
   },
-});
+  });
+}
 
-export type ClaudeRunnerMachine = typeof claudeRunnerMachine;
+// Type for the created machine
+export type ClaudeRunnerMachine = ReturnType<typeof createClaudeRunnerMachine>;
+
+// Default machine using RealClaudeCodeService (for backwards compatibility)
+// This is used in production when not explicitly injecting a service
+import { RealClaudeCodeService } from "./services/RealClaudeCodeService";
+export const claudeRunnerMachine = createClaudeRunnerMachine(
+  new RealClaudeCodeService(),
+);

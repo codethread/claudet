@@ -55,24 +55,32 @@ npx playwright show-report    # View latest test report
 
 ## Architecture
 
-### Server Architecture (src/index.tsx)
+### Server Architecture (src/backend/server.ts)
 
 This is a **Bun-native full-stack application** using `Bun.serve()` with routing, WebSockets, and HTML imports:
 
 1. **HTML Import Pattern**: Server imports `index.html` which includes `<script type="module" src="./frontend.tsx">`. Bun's bundler automatically transpiles and bundles React/TypeScript.
 
-2. **Persistent Claude CLI Integration**:
+2. **Persistent Claude CLI Integration** (with Dependency Injection):
    - Spawns a long-running `claude` CLI process with streaming JSON I/O
+   - **Abstraction Layer**: `ClaudeCodeService` interface allows swapping real vs. fake implementations
+   - **Production**: Uses `RealClaudeCodeService` (spawns actual Claude CLI)
+   - **Testing**: Uses `FakeClaudeCodeService` (mock with deterministic responses)
    - Maintains session state and request/response correlation via session IDs
    - API endpoint at `/api/chat` for sending messages to Claude
    - WebSocket endpoint at `/ws` for real-time log streaming to clients
 
-3. **HTTPS Development Server**:
+3. **State Machine** (src/backend/claudeRunner.ts):
+   - XState 5 state machine manages Claude process lifecycle
+   - Factory pattern: `createClaudeRunnerMachine(service)` accepts injected service
+   - Handles process startup, message sending, output parsing, and error recovery
+
+4. **HTTPS Development Server**:
    - Uses TLS certificates in `./certs/` directory
    - Serves on `0.0.0.0:3000` for network access
    - Displays QR code on startup for easy mobile access
 
-4. **Routes**:
+5. **Routes**:
    - `/*` - Serves index.html (SPA fallback)
    - `/api/chat` - POST endpoint for Claude interactions
    - `/api/hello`, `/api/hello/:name` - Example API endpoints
@@ -100,18 +108,33 @@ Custom build script with:
 
 ```
 src/
-├── index.tsx              # Server entry point (Bun.serve + routes)
-├── index.html             # HTML entry with React imports
-├── frontend.tsx           # React root component
-├── App.tsx                # Main application component
-├── APITester.tsx          # Claude API testing UI
-├── components/ui/         # shadcn/ui components
-├── lib/utils.ts           # Utility functions (cn, etc.)
-├── manifest.json          # PWA manifest
-└── sw.js                  # Service worker
+├── backend/
+│   ├── index.tsx                  # Production entry point
+│   ├── index.test-server.tsx      # Test entry point (uses FakeClaudeCodeService)
+│   ├── server.ts                  # Bun.serve + routes
+│   ├── claudeRunner.ts            # XState machine for Claude process
+│   ├── claudeRunner.test.ts       # Unit tests for state machine
+│   ├── claudeRunner.integration.test.ts  # Integration tests with real CLI
+│   └── services/
+│       ├── index.ts                      # Service exports
+│       ├── ClaudeCodeService.ts          # Interface definition
+│       ├── RealClaudeCodeService.ts      # Production implementation
+│       ├── FakeClaudeCodeService.ts      # Test mock implementation
+│       └── FakeClaudeCodeService.test.ts # Mock unit tests
+├── frontend/
+│   ├── index.html             # HTML entry with React imports
+│   ├── frontend.tsx           # React root component
+│   ├── App.tsx                # Main application component
+│   ├── APITester.tsx          # Claude API testing UI
+│   ├── chatMachine.ts         # Frontend state machine
+│   ├── chatMachine.test.ts    # Frontend tests
+│   ├── components/ui/         # shadcn/ui components
+│   ├── lib/utils.ts           # Utility functions (cn, etc.)
+│   ├── manifest.json          # PWA manifest
+│   └── sw.js                  # Service worker
 
 tests/
-├── chat.spec.ts           # Playwright E2E tests
+├── chat.spec.ts           # Playwright E2E tests (use FakeClaudeCodeService)
 └── screenshots/           # Test screenshots (committed to git)
     ├── desktop-chat.png
     └── mobile-iphone6-chat.png
@@ -124,6 +147,7 @@ docs/
 └── bun.md                 # Bun guidelines (important reference)
 
 playwright.config.ts       # Playwright configuration
+bunfig.toml               # Bun configuration (test exclusions)
 ```
 
 ## TypeScript Configuration
@@ -140,10 +164,16 @@ playwright.config.ts       # Playwright configuration
 
 Use `bun test` with the built-in test runner:
 
-- Test files should use `.test.ts` or `.spec.ts` suffix
+- Test files should use `.test.ts` suffix (in `src/` directory)
 - Import from `bun:test`: `import { test, expect, describe } from "bun:test"`
 - 5-second timeout per test (configurable with `--timeout`)
 - Supports snapshots with `--update-snapshots`
+- **Integration Tests**: `claudeRunner.integration.test.ts` tests real Claude CLI (requires claude CLI installed)
+
+```bash
+bun test                  # Run all unit tests (src/ directory only)
+bun test path/to/test.ts  # Run specific test file
+```
 
 ### E2E Tests with Playwright
 
@@ -151,9 +181,10 @@ E2E tests are located in `tests/` directory and use Playwright for browser autom
 
 **Configuration** (`playwright.config.ts`):
 - HTTPS support for self-signed dev certificates
-- Automatic dev server startup
+- Automatic dev server startup with **FakeClaudeCodeService** (no real Claude CLI needed!)
 - HTML reporter for test results
 - Screenshots saved to `tests/screenshots/`
+- Test files use `.spec.ts` suffix (Playwright-specific)
 
 **Writing UI Tests**:
 

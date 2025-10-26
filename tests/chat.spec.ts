@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Claude Chat Interface', () => {
   test('should capture screenshots for mobile (iPhone 6) and desktop viewports', async ({ page }) => {
-    // Set a long timeout for this test since the chat API response can take time
-    test.setTimeout(120000); // 2 minutes
+    // FakeClaudeCodeService responds in ~500ms, so 15s is plenty
+    test.setTimeout(15000);
 
     // Desktop viewport test
     await test.step('Desktop viewport screenshot', async () => {
@@ -14,7 +14,7 @@ test.describe('Claude Chat Interface', () => {
       await expect(page.getByRole('heading', { name: 'Claude Chats' })).toBeVisible();
 
       // Wait for WebSocket connection
-      await expect(page.getByText('Connected')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('Connected')).toBeVisible({ timeout: 3000 });
 
       // Type a very precise message that should get a deterministic response
       const input = page.getByPlaceholder('Type your message...');
@@ -27,14 +27,13 @@ test.describe('Claude Chat Interface', () => {
       await expect(page.getByText('Please respond with exactly these three words')).toBeVisible();
 
       // Wait for "Thinking..." to appear
-      await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
 
-      // Wait for the assistant's response (this might take a while)
-      // We'll wait for the "Thinking..." to disappear as a signal that response is ready
-      await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 90000 });
+      // Wait for the assistant's response (fake service responds in ~500ms)
+      await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
 
       // Wait a bit for the UI to settle
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(500);
 
       // Take desktop screenshot
       await page.screenshot({
@@ -52,8 +51,8 @@ test.describe('Claude Chat Interface', () => {
       // Wait for the page to be fully loaded
       await expect(page.getByRole('heading', { name: 'Claude Chats' })).toBeVisible();
 
-      // Wait for WebSocket connection indicator (mobile might not show "Connected" text)
-      await page.waitForTimeout(2000);
+      // Wait for WebSocket connection
+      await page.waitForTimeout(1000);
 
       // Type a very precise message
       const input = page.getByPlaceholder('Type your message...');
@@ -66,13 +65,13 @@ test.describe('Claude Chat Interface', () => {
       await expect(page.getByText('Count from 1 to 5')).toBeVisible();
 
       // Wait for "Thinking..." to appear
-      await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
 
-      // Wait for the assistant's response
-      await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 90000 });
+      // Wait for the assistant's response (fake service responds in ~500ms)
+      await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
 
       // Wait a bit for the UI to settle
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(500);
 
       // Take mobile screenshot
       await page.screenshot({
@@ -102,12 +101,13 @@ test.describe('Claude Chat Interface', () => {
   });
 
   test('should send a message and receive response', async ({ page }) => {
-    test.setTimeout(120000); // 2 minutes
+    // FakeClaudeCodeService responds in ~500ms, so 10s is plenty
+    test.setTimeout(10000);
 
     await page.goto('/');
 
     // Wait for WebSocket connection
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1000);
 
     // Type a deterministic prompt
     const input = page.getByPlaceholder('Type your message...');
@@ -120,13 +120,13 @@ test.describe('Claude Chat Interface', () => {
     await expect(page.getByText('What is 2 + 2?')).toBeVisible();
 
     // Wait for thinking indicator
-    await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
 
-    // Wait for response (thinking indicator should disappear)
-    await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 90000 });
+    // Wait for response (fake service responds in ~500ms)
+    await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
 
     // Check that we have at least 2 messages (user + assistant)
     const messages = page.locator('[class*="rounded-lg"]').filter({ hasText: /You|Claude/ });
-    await expect(messages).toHaveCount(2, { timeout: 5000 });
+    await expect(messages).toHaveCount(2, { timeout: 2000 });
   });
 });

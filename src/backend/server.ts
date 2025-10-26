@@ -2,7 +2,13 @@ import index from "../frontend/index.html";
 import qrcode from "qrcode-terminal";
 import { networkInterfaces } from "os";
 import { createActor } from "xstate";
-import { claudeRunnerMachine, type ClaudeResponse } from "./claudeRunner";
+import {
+  claudeRunnerMachine,
+  createClaudeRunnerMachine,
+  type ClaudeResponse,
+  type ClaudeRunnerMachine,
+} from "./claudeRunner";
+import type { ClaudeCodeService } from "./services/ClaudeCodeService";
 
 // Get local network IP address
 function getLocalIP(): string {
@@ -24,19 +30,54 @@ function getLocalIP(): string {
   return "localhost";
 }
 
-// Create and start the Claude runner actor
-const claudeActor = createActor(claudeRunnerMachine);
-claudeActor.start();
-claudeActor.send({ type: "START_PROCESS" });
+// Module-level actor (can be overridden via startServer)
+let claudeActor: ReturnType<typeof createActor<ClaudeRunnerMachine>>;
+let isReading = false; // Track if we're already reading output
 
-console.log("🤖 Claude session starting...");
+function initializeActor(machine: ClaudeRunnerMachine) {
+  // Stop existing actor if any
+  if (claudeActor) {
+    try {
+      claudeActor.stop();
+    } catch (e) {
+      // Ignore errors on stop
+    }
+  }
+
+  isReading = false; // Reset reading flag
+  claudeActor = createActor(machine);
+  claudeActor.start();
+  claudeActor.send({ type: "START_PROCESS" });
+  console.log("🤖 Claude session starting...");
+
+  // Start reading output after a short delay
+  setTimeout(() => {
+    if (!isReading) {
+      readClaudeOutput();
+    }
+  }, 100);
+}
+
+// Initialize with default production machine
+initializeActor(claudeRunnerMachine);
 
 // Start reading Claude output in the background
 async function readClaudeOutput() {
+  if (isReading) {
+    console.log("Already reading Claude output, skipping...");
+    return;
+  }
+
+  isReading = true;
+
   try {
+    // Wait a bit for process handle to be ready
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     const context = claudeActor.getSnapshot().context;
     if (!context.processHandle) {
       console.error("No process handle available");
+      isReading = false;
       return;
     }
 
@@ -68,13 +109,10 @@ async function readClaudeOutput() {
   } catch (error) {
     console.error("Error reading Claude output:", error);
     claudeActor.send({ type: "PROCESS_ERROR", error: String(error) });
+  } finally {
+    isReading = false;
   }
 }
-
-// Wait a bit for process to start, then begin reading output
-setTimeout(() => {
-  readClaudeOutput();
-}, 100);
 
 // Function to send a message to Claude
 async function sendToClaude(message: string): Promise<ClaudeResponse> {
@@ -88,16 +126,27 @@ async function sendToClaude(message: string): Promise<ClaudeResponse> {
       messageId,
     });
 
-    // Now get the request from context and set up the promise handlers
-    const context = claudeActor.getSnapshot().context;
-    const request = context.pendingRequests.get(messageId);
-    if (request) {
-      request.resolve = resolve;
-      request.reject = reject;
-    } else {
-      reject(new Error("Failed to create request"));
-      return;
-    }
+    // Poll for the request to be created (XState actions run synchronously)
+    const maxAttempts = 10;
+    let attempts = 0;
+
+    const checkRequest = () => {
+      const context = claudeActor.getSnapshot().context;
+      const request = context.pendingRequests.get(messageId);
+
+      if (request) {
+        request.resolve = resolve;
+        request.reject = reject;
+      } else if (attempts < maxAttempts) {
+        attempts++;
+        setTimeout(checkRequest, 10);
+      } else {
+        reject(new Error("Failed to create request - pending request not found after multiple attempts"));
+      }
+    };
+
+    // Start checking immediately
+    checkRequest();
 
     // Set a timeout
     setTimeout(() => {
@@ -110,7 +159,19 @@ async function sendToClaude(message: string): Promise<ClaudeResponse> {
   });
 }
 
-export function startServer() {
+export interface StartServerOptions {
+  /**
+   * Optional ClaudeCodeService for dependency injection (testing)
+   */
+  service?: ClaudeCodeService;
+}
+
+export function startServer(options: StartServerOptions = {}) {
+  // If a custom service is provided, reinitialize the actor
+  if (options.service) {
+    const customMachine = createClaudeRunnerMachine(options.service);
+    initializeActor(customMachine);
+  }
   const server = Bun.serve({
     hostname: "0.0.0.0", // Listen on all network interfaces
     port: 3000,
