@@ -1,23 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState, type FormEvent } from "react";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  logs?: string[];
-}
+import { useEffect, useRef, type FormEvent } from "react";
+import { useMachine } from "@xstate/react";
+import { chatMachine } from "./chatMachine";
 
 export function APITester() {
-  const [chatHistory, setChatHistory] = useState<Message[]>([]);
-  const [selectedMessageIndex, setSelectedMessageIndex] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentLogs, setCurrentLogs] = useState<string[]>([]);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [state, send] = useMachine(chatMachine, { input: undefined });
   const messageInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const collectingLogsRef = useRef(false);
 
   // Connect to websocket for logs
   useEffect(() => {
@@ -27,78 +18,44 @@ export function APITester() {
 
     ws.onopen = () => {
       console.log("WebSocket connected");
-      setWsConnected(true);
+      send({ type: "WEBSOCKET_CONNECTED" });
     };
 
     ws.onmessage = (event) => {
-      console.log("WS message received:", event.data.substring(0, 50), "collecting:", collectingLogsRef.current);
-      // Collect logs while a message is being processed
-      if (collectingLogsRef.current) {
-        setCurrentLogs((prev) => [...prev, event.data]);
-      }
+      console.log("WS message received:", event.data.substring(0, 50));
+      send({ type: "WEBSOCKET_MESSAGE", data: event.data });
     };
 
     ws.onerror = (error) => {
       console.error("WebSocket error:", error);
-      setWsConnected(false);
+      send({ type: "WEBSOCKET_ERROR", error: String(error) });
     };
 
     ws.onclose = () => {
       console.log("WebSocket disconnected");
-      setWsConnected(false);
+      send({ type: "WEBSOCKET_DISCONNECTED" });
     };
 
     return () => {
       ws.close();
     };
-  }, []);
+  }, [send]);
 
-  const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
+  const sendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsLoading(true);
-    setCurrentLogs([]); // Reset logs for new message
-    collectingLogsRef.current = true; // Start collecting logs (for live display)
 
     const message = messageInputRef.current!.value;
     if (!message.trim()) {
-      setIsLoading(false);
-      collectingLogsRef.current = false;
       return;
     }
 
-    try {
-      setChatHistory((prev) => [...prev, { role: "user", content: message }]);
-      messageInputRef.current!.value = "";
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-
-      const data = await res.json();
-
-      // Stop collecting logs
-      collectingLogsRef.current = false;
-
-      // Add assistant message with logs from the API response
-      setChatHistory((prev) => [
-        ...prev,
-        { role: "assistant", content: data.response, logs: data.logs || [] },
-      ]);
-    } catch (error) {
-      collectingLogsRef.current = false;
-
-      setChatHistory((prev) => [
-        ...prev,
-        { role: "assistant", content: `Error: ${error}`, logs: [] },
-      ]);
-    } finally {
-      setIsLoading(false);
-      setCurrentLogs([]);
-    }
+    send({ type: "SEND_MESSAGE", message });
+    messageInputRef.current!.value = "";
   };
 
+  const { chatHistory, selectedMessageIndex, currentLogs } = state.context;
+  const isConnected = state.matches("idle") || state.matches("sending");
+  const isLoading = state.matches("sending");
   const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
 
   return (
@@ -107,9 +64,9 @@ export function APITester() {
       <div className="flex-1 flex flex-col gap-4 sm:gap-4 min-h-0 pb-safe">
         <div className="flex items-center justify-between flex-shrink-0">
           <h2 className="text-lg sm:text-xl font-semibold">Chat with Claude</h2>
-          <div className={cn("text-xs flex items-center gap-2 sm:gap-2", wsConnected ? "text-green-600" : "text-red-600")}>
-            <div className={cn("w-2 h-2 rounded-full", wsConnected ? "bg-green-600" : "bg-red-600")} />
-            <span className="hidden sm:inline">{wsConnected ? "Connected" : "Disconnected"}</span>
+          <div className={cn("text-xs flex items-center gap-2 sm:gap-2", isConnected ? "text-green-600" : "text-red-600")}>
+            <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-green-600" : "bg-red-600")} />
+            <span className="hidden sm:inline">{isConnected ? "Connected" : "Disconnected"}</span>
           </div>
         </div>
 
@@ -122,7 +79,7 @@ export function APITester() {
               {chatHistory.map((msg, i) => (
                 <div
                   key={i}
-                  onClick={() => msg.role === "assistant" && msg.logs ? setSelectedMessageIndex(i) : null}
+                  onClick={() => msg.role === "assistant" && msg.logs ? send({ type: "SELECT_MESSAGE", index: i }) : null}
                   className={cn(
                     "p-3 sm:p-3 rounded-lg",
                     msg.role === "user" ? "bg-primary/10 ml-4 sm:ml-8" : "bg-muted mr-4 sm:mr-8",
@@ -163,11 +120,11 @@ export function APITester() {
           <Input
             ref={messageInputRef}
             type="text"
-            placeholder={wsConnected ? "Type your message..." : "Waiting for connection..."}
+            placeholder={isConnected ? "Type your message..." : "Waiting for connection..."}
             className="flex-1"
-            disabled={isLoading || !wsConnected}
+            disabled={isLoading || !isConnected}
           />
-          <Button type="submit" disabled={isLoading || !wsConnected}>
+          <Button type="submit" disabled={isLoading || !isConnected}>
             Send
           </Button>
         </form>
@@ -178,7 +135,7 @@ export function APITester() {
         <div className="w-full lg:w-[500px] flex flex-col gap-4 sm:gap-4 animate-in slide-in-from-right duration-200 min-h-0 lg:min-h-full">
           <div className="flex items-center justify-between">
             <h2 className="text-lg sm:text-xl font-semibold">Message Logs</h2>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedMessageIndex(null)}>
+            <Button variant="ghost" size="sm" onClick={() => send({ type: "DESELECT_MESSAGE" })}>
               ✕
             </Button>
           </div>
