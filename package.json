@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --hot src/index.tsx",
-    "start": "NODE_ENV=production bun src/index.tsx",
+    "dev": "bun --hot src/backend/index.tsx",
+    "start": "NODE_ENV=production bun src/backend/index.tsx",
     "build": "bun scripts/build.ts",
     "generate:icons": "bun scripts/generate-pwa-icons.js",
     "test": "bun test",

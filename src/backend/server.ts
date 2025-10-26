@@ -1,4 +1,4 @@
-import index from "../index.html";
+import index from "../frontend/index.html";
 import qrcode from "qrcode-terminal";
 import { networkInterfaces } from "os";
 import { createActor } from "xstate";
@@ -81,21 +81,23 @@ async function sendToClaude(message: string): Promise<ClaudeResponse> {
   const messageId = crypto.randomUUID();
 
   return new Promise((resolve, reject) => {
-    const context = claudeActor.getSnapshot().context;
-
-    // Set up the promise handlers in the pending requests
-    const request = context.pendingRequests.get(messageId);
-    if (request) {
-      request.resolve = resolve;
-      request.reject = reject;
-    }
-
-    // Send the message
+    // Send the message first so the state machine creates the pending request
     claudeActor.send({
       type: "SEND_MESSAGE",
       message,
       messageId,
     });
+
+    // Now get the request from context and set up the promise handlers
+    const context = claudeActor.getSnapshot().context;
+    const request = context.pendingRequests.get(messageId);
+    if (request) {
+      request.resolve = resolve;
+      request.reject = reject;
+    } else {
+      reject(new Error("Failed to create request"));
+      return;
+    }
 
     // Set a timeout
     setTimeout(() => {
@@ -112,6 +114,7 @@ export function startServer() {
   const server = Bun.serve({
     hostname: "0.0.0.0", // Listen on all network interfaces
     port: 3000,
+    idleTimeout: 120, // 120 seconds to allow for longer Claude responses
     tls: {
       cert: Bun.file("./certs/localhost+3.pem"),
       key: Bun.file("./certs/localhost+3-key.pem"),
@@ -158,12 +161,12 @@ export function startServer() {
         },
       },
 
-      "/sw.js": Bun.file("./src/sw.js"),
-      "/src/manifest.json": Bun.file("./src/manifest.json"),
-      "/logo.svg": Bun.file("./src/assets/logo.svg"),
-      "/icon-180.png": Bun.file("./src/assets/icon-180.png"),
-      "/icon-192.png": Bun.file("./src/assets/icon-192.png"),
-      "/icon-512.png": Bun.file("./src/assets/icon-512.png"),
+      "/sw.js": Bun.file("./src/frontend/sw.js"),
+      "/src/manifest.json": Bun.file("./src/frontend/manifest.json"),
+      "/logo.svg": Bun.file("./src/frontend/assets/logo.svg"),
+      "/icon-180.png": Bun.file("./src/frontend/assets/icon-180.png"),
+      "/icon-192.png": Bun.file("./src/frontend/assets/icon-192.png"),
+      "/icon-512.png": Bun.file("./src/frontend/assets/icon-512.png"),
 
       // Serve index.html for all unmatched routes.
       "/*": index,
