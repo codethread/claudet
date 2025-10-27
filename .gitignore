@@ -32,7 +32,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Generated assets (run `bun run setup` to generate)
 certs/
+src/frontend/assets/gen/
 
 # Playwright
 playwright-report/

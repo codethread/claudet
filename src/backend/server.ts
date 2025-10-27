@@ -1,6 +1,7 @@
 import index from "../frontend/index.html";
 import qrcode from "qrcode-terminal";
 import { networkInterfaces } from "os";
+import { existsSync } from "fs";
 import { RealClaudeCodeService } from "./services";
 import type { ClaudeCodeService } from "./services/ClaudeCodeService";
 import { SessionManager } from "./SessionManager";
@@ -178,6 +179,21 @@ export function startServer(options: StartServerOptions = {}) {
   if (options.service) {
     initializeSessionManager(options.service);
   }
+
+  // Check if certificates exist
+  if (
+    !existsSync("./certs/localhost+3.pem") ||
+    !existsSync("./certs/localhost+3-key.pem")
+  ) {
+    console.error("\n❌ HTTPS certificates not found!");
+    console.error("📋 Run the following command to generate them:\n");
+    console.error("   bun run setup\n");
+    console.error(
+      "   (or just: bun run generate:certs if you only need certificates)\n",
+    );
+    process.exit(1);
+  }
+
   const server = Bun.serve({
     hostname: "0.0.0.0", // Listen on all network interfaces
     port: 3000,
@@ -248,9 +264,9 @@ export function startServer(options: StartServerOptions = {}) {
       "/sw.js": Bun.file("./src/frontend/sw.js"),
       "/src/manifest.json": Bun.file("./src/frontend/manifest.json"),
       "/logo.svg": Bun.file("./src/frontend/assets/logo.svg"),
-      "/icon-180.png": Bun.file("./src/frontend/assets/icon-180.png"),
-      "/icon-192.png": Bun.file("./src/frontend/assets/icon-192.png"),
-      "/icon-512.png": Bun.file("./src/frontend/assets/icon-512.png"),
+      "/icon-180.png": Bun.file("./src/frontend/assets/gen/icon-180.png"),
+      "/icon-192.png": Bun.file("./src/frontend/assets/gen/icon-192.png"),
+      "/icon-512.png": Bun.file("./src/frontend/assets/gen/icon-512.png"),
 
       // Serve index.html for all unmatched routes.
       "/*": index,

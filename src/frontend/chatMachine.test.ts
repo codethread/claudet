@@ -29,7 +29,7 @@ function createTestActor(initialContext?: Partial<ChatMachineContext>) {
   const actor = createActor(machine, {
     input: {
       currentSessionId: TEST_SESSION_ID,
-      sessions: [{ id: TEST_SESSION_ID, createdAt: new Date().toISOString() }],
+      sessions: [{ id: TEST_SESSION_ID, model: "sonnet", createdAt: new Date().toISOString() }],
       ...initialContext,
     },
   });
@@ -53,7 +53,7 @@ function createErrorActor(errorMessage: string) {
   const actor = createActor(machine, {
     input: {
       currentSessionId: TEST_SESSION_ID,
-      sessions: [{ id: TEST_SESSION_ID, createdAt: new Date().toISOString() }],
+      sessions: [{ id: TEST_SESSION_ID, model: "sonnet", createdAt: new Date().toISOString() }],
     },
   });
   actor.start();

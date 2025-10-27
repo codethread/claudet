@@ -10,8 +10,8 @@ test.describe('Claude Chat Interface', () => {
       await page.setViewportSize({ width: 1920, height: 1080 });
       await page.goto('/');
 
-      // Wait for the page to be fully loaded
-      await expect(page.getByRole('heading', { name: 'Claude Chats' })).toBeVisible();
+      // Wait for the page to be fully loaded by checking for controls
+      await expect(page.locator('#model-select')).toBeVisible();
 
       // Wait for WebSocket connection
       await expect(page.getByText('Connected')).toBeVisible({ timeout: 3000 });
@@ -48,8 +48,8 @@ test.describe('Claude Chat Interface', () => {
       await page.setViewportSize({ width: 375, height: 667 });
       await page.goto('/');
 
-      // Wait for the page to be fully loaded
-      await expect(page.getByRole('heading', { name: 'Claude Chats' })).toBeVisible();
+      // Wait for the page to be fully loaded by checking for controls
+      await expect(page.locator('#model-select')).toBeVisible();
 
       // Wait for WebSocket connection
       await page.waitForTimeout(1000);
@@ -84,11 +84,9 @@ test.describe('Claude Chat Interface', () => {
   test('should display chat interface elements correctly', async ({ page }) => {
     await page.goto('/');
 
-    // Check main heading
-    await expect(page.getByRole('heading', { name: 'Claude Chats' })).toBeVisible();
-
-    // Check chat section heading
-    await expect(page.getByRole('heading', { name: 'Chat with Claude' })).toBeVisible();
+    // Check top controls
+    await expect(page.locator('#model-select')).toBeVisible();
+    await expect(page.getByRole('button', { name: '+ New' })).toBeVisible();
 
     // Check input field
     await expect(page.getByPlaceholder(/Type your message|Waiting for connection/)).toBeVisible();

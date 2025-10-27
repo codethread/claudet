@@ -4,7 +4,7 @@ import { FakeClaudeCodeService } from "./FakeClaudeCodeService";
 describe("FakeClaudeCodeService", () => {
   test("should spawn and provide readable streams", async () => {
     const service = new FakeClaudeCodeService();
-    const handle = service.spawn();
+    const handle = service.spawn("sonnet");
 
     expect(handle.stdin).toBeDefined();
     expect(handle.stdout).toBeDefined();
@@ -15,7 +15,7 @@ describe("FakeClaudeCodeService", () => {
   test("should emit system init message when message is sent", async () => {
     const service = new FakeClaudeCodeService();
     service.responseDelayMs = 0; // No delay for unit tests
-    const handle = service.spawn();
+    const handle = service.spawn("sonnet");
 
     const messages: string[] = [];
     const reader = handle.stdout.getReader();
@@ -82,7 +82,7 @@ describe("FakeClaudeCodeService", () => {
   test("should track received messages", () => {
     const service = new FakeClaudeCodeService();
     service.responseDelayMs = 0; // No delay for unit tests
-    const handle = service.spawn();
+    const handle = service.spawn("sonnet");
 
     const msg1 = '{"type":"user","message":{"content":"hello"}}';
     const msg2 = '{"type":"user","message":{"content":"world"}}';

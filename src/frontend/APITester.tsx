@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, type FormEvent } from "react";
 import { useMachine } from "@xstate/react";
 import { chatMachine } from "./chatMachine";
+import { ThemeToggle } from "./components/ThemeToggle";
 
 export function APITester() {
   const [state, send] = useMachine(chatMachine, { input: undefined });
@@ -74,77 +75,66 @@ export function APITester() {
     <div className="h-full w-full text-left flex flex-col lg:flex-row gap-4 sm:gap-4">
       {/* Chat Panel */}
       <div className="flex-1 flex flex-col gap-4 sm:gap-4 min-h-0 pb-safe">
-        <div className="flex items-center justify-between flex-shrink-0 gap-4">
-          <h2 className="text-lg sm:text-xl font-semibold">Chat with Claude</h2>
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* Model Selector */}
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="model-select"
-                className="text-xs text-muted-foreground hidden sm:inline"
-              >
-                Model:
-              </label>
-              <select
-                id="model-select"
-                value={selectedModel}
-                onChange={(e) =>
-                  send({ type: "SELECT_MODEL", model: e.target.value })
-                }
-                className="text-xs border border-input rounded px-2 py-1 bg-background"
-                disabled={!isConnected}
-              >
-                <option value="haiku">Haiku</option>
-                <option value="sonnet">Sonnet</option>
-              </select>
-            </div>
-            {/* Session Selector */}
-            <div className="flex items-center gap-2">
-              <select
-                value={currentSessionId || ""}
-                onChange={(e) =>
-                  send({ type: "SWITCH_SESSION", sessionId: e.target.value })
-                }
-                className="text-xs border border-input rounded px-2 py-1 bg-background"
-                disabled={!isConnected}
-                title={
-                  currentSession
-                    ? `Session: ${currentSession.id.substring(0, 8)} (${currentSession.model})`
-                    : ""
-                }
-              >
-                {sessions.map((session) => (
-                  <option key={session.id} value={session.id}>
-                    {session.id.substring(0, 8)} ({session.model})
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => send({ type: "CREATE_SESSION" })}
-                disabled={!isConnected || state.matches("creatingSession")}
-                className="text-xs"
-              >
-                + New
-              </Button>
-            </div>
+        {/* Top Controls */}
+        <div className="flex items-center justify-evenly sm:justify-start flex-shrink-0 gap-2 sm:gap-4 flex-wrap">
+          <ThemeToggle />
+          {/* Model Selector */}
+          <select
+            id="model-select"
+            value={selectedModel}
+            onChange={(e) =>
+              send({ type: "SELECT_MODEL", model: e.target.value })
+            }
+            className="text-xs border border-input rounded px-2 py-1 bg-background"
+            disabled={!isConnected}
+          >
+            <option value="haiku">Haiku</option>
+            <option value="sonnet">Sonnet</option>
+          </select>
+          {/* Session Selector */}
+          <select
+            value={currentSessionId || ""}
+            onChange={(e) =>
+              send({ type: "SWITCH_SESSION", sessionId: e.target.value })
+            }
+            className="text-xs border border-input rounded px-2 py-1 bg-background"
+            disabled={!isConnected}
+            title={
+              currentSession
+                ? `Session: ${currentSession.id.substring(0, 8)} (${currentSession.model})`
+                : ""
+            }
+          >
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.id.substring(0, 8)} ({session.model})
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => send({ type: "CREATE_SESSION" })}
+            disabled={!isConnected || state.matches("creatingSession")}
+            className="text-xs"
+          >
+            + New
+          </Button>
+          <div
+            className={cn(
+              "text-xs flex items-center gap-1 sm:gap-2",
+              isConnected ? "text-green-600" : "text-red-600",
+            )}
+          >
             <div
               className={cn(
-                "text-xs flex items-center gap-2 sm:gap-2",
-                isConnected ? "text-green-600" : "text-red-600",
+                "w-2 h-2 rounded-full",
+                isConnected ? "bg-green-600" : "bg-red-600",
               )}
-            >
-              <div
-                className={cn(
-                  "w-2 h-2 rounded-full",
-                  isConnected ? "bg-green-600" : "bg-red-600",
-                )}
-              />
-              <span className="hidden sm:inline">
-                {isConnected ? "Connected" : "Disconnected"}
-              </span>
-            </div>
+            />
+            <span className="hidden sm:inline">
+              {isConnected ? "Connected" : "Disconnected"}
+            </span>
           </div>
         </div>
 
