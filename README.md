@@ -19,7 +19,11 @@ A full-stack web application that provides an interactive chat interface for Cla
 ## Prerequisites
 
 - [Bun](https://bun.sh) v1.2.22 or later
-- [ImageMagick](https://imagemagick.org/) (optional, for regenerating PWA icons)
+- [mkcert](https://github.com/FiloSottile/mkcert) (for HTTPS certificates)
+  ```bash
+  brew install mkcert
+  ```
+- [ImageMagick](https://imagemagick.org/) (for generating PWA icons)
   ```bash
   brew install imagemagick
   ```
@@ -35,6 +39,9 @@ cd claudet
 
 # Install dependencies
 bun install
+
+# Generate certificates and PWA icons
+bun run setup
 ```
 
 ### Development
@@ -45,13 +52,15 @@ bun dev
 ```
 
 The server will start on `https://0.0.0.0:3000` with:
-- ✅ HTTPS enabled (uses certificates in `./certs/`)
+- ✅ HTTPS enabled (uses self-signed certificates in `./certs/`)
 - ✅ QR code displayed in terminal for easy mobile access
 - ✅ Hot module reloading for instant updates
 
 Access the app:
 - **Desktop:** `https://localhost:3000`
 - **Mobile:** Scan the QR code shown in terminal
+
+> **Note:** If you see a certificate error, make sure you've run `bun run setup` to generate the certificates. The `mkcert` tool will install a local CA so your browser trusts the certificates.
 
 ### Production
 
@@ -78,10 +87,13 @@ Production builds are output to the `dist/` folder with:
 
 | Command | Description |
 |---------|-------------|
+| `bun run setup` | **First-time setup:** Generate HTTPS certificates and PWA icons |
 | `bun dev` | Start development server with hot reload (HTTPS on port 3000) |
 | `bun start` | Run production server |
 | `bun run build` | Build for production to `dist/` folder |
-| `bun run generate:icons` | Generate PWA icon files from `src/assets/icon.svg` |
+| `bun run validate` | Run all checks: type-check, unit tests, E2E tests, and build |
+| `bun run generate:icons` | Generate PWA icon files from `src/frontend/assets/icon.svg` to `src/frontend/assets/gen/` |
+| `bun run generate:certs` | Generate HTTPS certificates using mkcert |
 | `bun test` | Run unit tests with Bun's built-in test runner |
 | `bun test <file>` | Run specific test file |
 | `bun test --test-name-pattern "<pattern>"` | Run tests matching pattern |

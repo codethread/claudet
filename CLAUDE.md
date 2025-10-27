@@ -40,6 +40,9 @@ Key points:
 ## Quick Reference: Development Commands
 
 ```bash
+# Setup (first time or when assets need regenerating)
+bun run setup                     # Generate certs + PWA icons
+
 # Development
 bun dev                           # Start dev server (HTTPS port 3000)
 bun start                         # Production server
@@ -49,7 +52,9 @@ bun run build                     # Build for production
 bun test                          # Run unit tests
 bun run test:e2e                  # E2E tests (headless)
 bun run test:e2e:ui              # E2E tests (with UI)
+bun run validate                  # Run all checks (type-check, test, test:e2e, build)
 
-# Assets
+# Assets (generated, see src/frontend/assets/gen/)
 bun run generate:icons            # Generate PWA icons
+bun run generate:certs            # Generate HTTPS certificates
 ```
