@@ -91,7 +91,11 @@ Production builds are output to the `dist/` folder with:
 | `bun dev` | Start development server with hot reload (HTTPS on port 3000) |
 | `bun start` | Run production server |
 | `bun run build` | Build for production to `dist/` folder |
-| `bun run validate` | Run all checks: type-check, unit tests, E2E tests, and build |
+| `bun run validate` | Run all checks: type-check, format, lint, unit tests, E2E tests, and build |
+| `bun run format` | Format all files with Biome |
+| `bun run format:check` | Check formatting without modifying files |
+| `bun run lint` | Run linting with Biome |
+| `bun run lint:fix` | Apply safe automatic lint fixes |
 | `bun run generate:icons` | Generate PWA icon files from `src/frontend/assets/icon.svg` to `src/frontend/assets/gen/` |
 | `bun run generate:certs` | Generate HTTPS certificates using mkcert |
 | `bun test` | Run unit tests with Bun's built-in test runner |

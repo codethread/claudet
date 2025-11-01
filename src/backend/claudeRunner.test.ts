@@ -1,254 +1,265 @@
-// @ts-nocheck - Test mocks use simplified types that don't match Bun's exact types
-import { describe, expect, test } from "vitest";
-import { createActor, fromPromise } from "xstate";
-import { claudeRunnerMachine } from "./claudeRunner";
+import { describe, expect, test } from 'vitest';
+import { createActor, fromPromise } from 'xstate';
+import type { Socket } from 'socket.io';
+import { claudeRunnerMachine } from './claudeRunner';
+import type { ClaudeProcessHandle } from './services/ClaudeCodeService';
 
-describe("claudeRunnerMachine", () => {
-  describe("initial state", () => {
-    test("should start in idle state", () => {
-      const actor = createActor(claudeRunnerMachine);
-      actor.start();
+// Mock stdin type for testing - matches ClaudeProcessHandle interface
+type MockStdin = { write: (data: string) => void };
 
-      expect(actor.getSnapshot().value).toBe("idle");
-      expect(actor.getSnapshot().context.processHandle).toBe(null);
-      expect(actor.getSnapshot().context.pendingRequests.size).toBe(0);
+describe('claudeRunnerMachine', () => {
+	describe('initial state', () => {
+		test('should start in idle state', () => {
+			const actor = createActor(claudeRunnerMachine);
+			actor.start();
 
-      actor.stop();
-    });
-  });
+			expect(actor.getSnapshot().value).toBe('idle');
+			expect(actor.getSnapshot().context.processHandle).toBe(null);
+			expect(actor.getSnapshot().context.pendingRequests.size).toBe(0);
 
-  describe("process lifecycle", () => {
-    test("should transition from idle to starting when START_PROCESS is sent", () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: { write: () => {} } as any,
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			actor.stop();
+		});
+	});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+	describe('process lifecycle', () => {
+		test('should transition from idle to starting when START_PROCESS is sent', () => {
+			const mockStdin: MockStdin = { write: () => {} };
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
-      expect(actor.getSnapshot().value).toBe("starting");
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      actor.stop();
-    });
+			actor.send({ type: 'START_PROCESS' });
+			expect(actor.getSnapshot().value).toBe('starting');
 
-    test("should transition to running on successful process start", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: { write: () => {} } as any,
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			actor.stop();
+		});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+		test('should transition to running on successful process start', async () => {
+			const mockStdin: MockStdin = { write: () => {} };
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      // Wait for the async transition
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			actor.send({ type: 'START_PROCESS' });
 
-      expect(actor.getSnapshot().value).toBe("running");
-      expect(actor.getSnapshot().context.processHandle).not.toBe(null);
+			// Wait for the async transition
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      actor.stop();
-    });
+			expect(actor.getSnapshot().value).toBe('running');
+			expect(actor.getSnapshot().context.processHandle).not.toBe(null);
 
-    test("should transition to error state on process start failure", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            throw new Error("Process start failed");
-          }),
-        },
-      });
+			actor.stop();
+		});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+		test('should transition to error state on process start failure', async () => {
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async (): Promise<ClaudeProcessHandle> => {
+						throw new Error('Process start failed');
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      // Wait for the async transition
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			actor.send({ type: 'START_PROCESS' });
 
-      expect(actor.getSnapshot().value).toBe("error");
-      expect(actor.getSnapshot().context.error).toContain("Process start failed");
+			// Wait for the async transition
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      actor.stop();
-    });
-  });
+			expect(actor.getSnapshot().value).toBe('error');
+			expect(actor.getSnapshot().context.error).toContain('Process start failed');
 
-  describe("WebSocket client management", () => {
-    test("should register WebSocket clients", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: { write: () => {} } as any,
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			actor.stop();
+		});
+	});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+	describe('WebSocket client management', () => {
+		test('should register WebSocket clients', async () => {
+			const mockStdin: MockStdin = { write: () => {} };
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      const mockClient = { id: "test-client" };
-      actor.send({ type: "REGISTER_WS_CLIENT", client: mockClient });
+			actor.send({ type: 'START_PROCESS' });
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(actor.getSnapshot().context.logClients.has(mockClient)).toBe(true);
+			const mockClient = { id: 'test-client' } as unknown as Socket;
+			actor.send({ type: 'REGISTER_WS_CLIENT', client: mockClient });
 
-      actor.stop();
-    });
+			expect(actor.getSnapshot().context.logClients.has(mockClient)).toBe(true);
 
-    test("should unregister WebSocket clients", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: { write: () => {} } as any,
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			actor.stop();
+		});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+		test('should unregister WebSocket clients', async () => {
+			const mockStdin: MockStdin = { write: () => {} };
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      const mockClient = { id: "test-client" };
-      actor.send({ type: "REGISTER_WS_CLIENT", client: mockClient });
-      expect(actor.getSnapshot().context.logClients.has(mockClient)).toBe(true);
+			actor.send({ type: 'START_PROCESS' });
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      actor.send({ type: "UNREGISTER_WS_CLIENT", client: mockClient });
-      expect(actor.getSnapshot().context.logClients.has(mockClient)).toBe(false);
+			const mockClient = { id: 'test-client' } as unknown as Socket;
+			actor.send({ type: 'REGISTER_WS_CLIENT', client: mockClient });
+			expect(actor.getSnapshot().context.logClients.has(mockClient)).toBe(true);
 
-      actor.stop();
-    });
-  });
+			actor.send({ type: 'UNREGISTER_WS_CLIENT', client: mockClient });
+			expect(actor.getSnapshot().context.logClients.has(mockClient)).toBe(false);
 
-  describe("message handling", () => {
-    test("should track pending requests when sending messages", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: { write: () => {} } as any,
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			actor.stop();
+		});
+	});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+	describe('message handling', () => {
+		test('should track pending requests when sending messages', async () => {
+			const mockStdin: MockStdin = { write: () => {} };
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      const messageId = "test-message-id";
-      actor.send({
-        type: "SEND_MESSAGE",
-        message: "Hello, Claude!",
-        messageId,
-      });
+			actor.send({ type: 'START_PROCESS' });
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(actor.getSnapshot().context.pendingRequests.has(messageId)).toBe(true);
+			const messageId = 'test-message-id';
+			actor.send({
+				type: 'SEND_MESSAGE',
+				message: 'Hello, Claude!',
+				messageId,
+			});
 
-      actor.stop();
-    });
-  });
+			expect(actor.getSnapshot().context.pendingRequests.has(messageId)).toBe(true);
 
-  describe("state transitions", () => {
-    test("should transition to stopped state on STOP event", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: { write: () => {} } as any,
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			actor.stop();
+		});
+	});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+	describe('state transitions', () => {
+		test('should transition to stopped state on STOP event', async () => {
+			const mockStdin: MockStdin = { write: () => {} };
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      actor.send({ type: "STOP" });
-      expect(actor.getSnapshot().value).toBe("stopped");
+			actor.send({ type: 'START_PROCESS' });
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      actor.stop();
-    });
+			actor.send({ type: 'STOP' });
+			expect(actor.getSnapshot().value).toBe('stopped');
 
-    test("should allow restarting from error state", async () => {
-      const mockMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            throw new Error("First attempt failed");
-          }),
-        },
-      });
+			actor.stop();
+		});
 
-      const actor = createActor(mockMachine);
-      actor.start();
+		test('should allow restarting from error state', async () => {
+			const mockMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async (): Promise<ClaudeProcessHandle> => {
+						throw new Error('First attempt failed');
+					}),
+				},
+			});
 
-      actor.send({ type: "START_PROCESS" });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+			const actor = createActor(mockMachine);
+			actor.start();
 
-      expect(actor.getSnapshot().value).toBe("error");
+			actor.send({ type: 'START_PROCESS' });
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Create a new machine that will succeed
-      const successMachine = claudeRunnerMachine.provide({
-        actors: {
-          startProcess: fromPromise(async () => {
-            return {
-              stdin: new WritableStream(),
-              stdout: new ReadableStream(),
-              stderr: new ReadableStream(),
-            };
-          }),
-        },
-      });
+			expect(actor.getSnapshot().value).toBe('error');
 
-      const actor2 = createActor(successMachine);
-      actor2.start();
+			// Create a new machine that will succeed
+			const mockStdin: MockStdin = { write: () => {} };
+			const successMachine = claudeRunnerMachine.provide({
+				actors: {
+					startProcess: fromPromise(async () => {
+						return {
+							stdin: mockStdin,
+							stdout: new ReadableStream(),
+							stderr: new ReadableStream(),
+						};
+					}),
+				},
+			});
 
-      // Simulate error state
-      actor2.send({ type: "START_PROCESS" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+			const actor2 = createActor(successMachine);
+			actor2.start();
 
-      expect(actor2.getSnapshot().value).toBe("running");
+			// Simulate error state
+			actor2.send({ type: 'START_PROCESS' });
+			await new Promise((resolve) => setTimeout(resolve, 50));
 
-      actor.stop();
-      actor2.stop();
-    });
-  });
+			expect(actor2.getSnapshot().value).toBe('running');
+
+			actor.stop();
+			actor2.stop();
+		});
+	});
 });

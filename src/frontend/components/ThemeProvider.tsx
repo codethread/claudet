@@ -1,74 +1,76 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-type Theme = "dark" | "light" | "system";
+type Theme = 'dark' | 'light' | 'system';
 
 type ThemeProviderProps = {
-  children: ReactNode;
-  defaultTheme?: Theme;
-  storageKey?: string;
+	children: ReactNode;
+	defaultTheme?: Theme;
+	storageKey?: string;
 };
 
 type ThemeProviderState = {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+	theme: Theme;
+	setTheme: (theme: Theme) => void;
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 
 export function ThemeProvider({
-  children,
-  defaultTheme = "system",
-  storageKey = "claudet-ui-theme",
-  ...props
+	children,
+	defaultTheme = 'system',
+	storageKey = 'claudet-ui-theme',
+	...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
-    } catch {
-      return defaultTheme;
-    }
-  });
+	const [theme, setTheme] = useState<Theme>(() => {
+		try {
+			return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
+		} catch {
+			return defaultTheme;
+		}
+	});
 
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
+	useEffect(() => {
+		const root = window.document.documentElement;
+		root.classList.remove('light', 'dark');
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
+		if (theme === 'system') {
+			const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+				? 'dark'
+				: 'light';
+			root.classList.add(systemTheme);
+		} else {
+			root.classList.add(theme);
+		}
+	}, [theme]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, theme);
-    } catch (error) {
-      console.error("Failed to save theme preference:", error);
-    }
-  }, [theme, storageKey]);
+	useEffect(() => {
+		try {
+			localStorage.setItem(storageKey, theme);
+		} catch (error) {
+			console.error('Failed to save theme preference:', error);
+		}
+	}, [theme, storageKey]);
 
-  const value = {
-    theme,
-    setTheme: (newTheme: Theme) => {
-      setTheme(newTheme);
-    },
-  };
+	const value = {
+		theme,
+		setTheme: (newTheme: Theme) => {
+			setTheme(newTheme);
+		},
+	};
 
-  return (
-    <ThemeProviderContext.Provider {...props} value={value}>
-      {children}
-    </ThemeProviderContext.Provider>
-  );
+	return (
+		<ThemeProviderContext.Provider {...props} value={value}>
+			{children}
+		</ThemeProviderContext.Provider>
+	);
 }
 
 export const useTheme = () => {
-  const context = useContext(ThemeProviderContext);
+	const context = useContext(ThemeProviderContext);
 
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
+	if (context === undefined) {
+		throw new Error('useTheme must be used within a ThemeProvider');
+	}
 
-  return context;
+	return context;
 };

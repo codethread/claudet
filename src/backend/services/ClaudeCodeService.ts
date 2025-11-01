@@ -7,20 +7,20 @@
  */
 
 export interface ClaudeProcessHandle {
-  stdin: WritableStreamDefaultWriter | { write: (data: string) => void };
-  stdout: ReadableStream<Uint8Array>;
-  stderr: ReadableStream<Uint8Array>;
+	stdin: WritableStreamDefaultWriter | { write: (data: string) => void };
+	stdout: ReadableStream<Uint8Array>;
+	stderr: ReadableStream<Uint8Array>;
 }
 
-export type ClaudeModel = "haiku" | "sonnet";
+export type ClaudeModel = 'haiku' | 'sonnet';
 
 export interface ClaudeCodeService {
-  /**
-   * Spawn a Claude Code CLI process (or mock equivalent)
-   * Returns handles to stdin, stdout, stderr streams
-   * @param model - The Claude model to use (haiku, sonnet, or opus)
-   */
-  spawn(model: ClaudeModel): ClaudeProcessHandle;
+	/**
+	 * Spawn a Claude Code CLI process (or mock equivalent)
+	 * Returns handles to stdin, stdout, stderr streams
+	 * @param model - The Claude model to use (haiku, sonnet, or opus)
+	 */
+	spawn(model: ClaudeModel): ClaudeProcessHandle;
 }
 
 /**
@@ -29,5 +29,5 @@ export interface ClaudeCodeService {
  * Development: haiku (faster, cheaper)
  */
 export function getDefaultModel(): ClaudeModel {
-  return process.env.NODE_ENV === "production" ? "sonnet" : "haiku";
+	return process.env.NODE_ENV === 'production' ? 'sonnet' : 'haiku';
 }

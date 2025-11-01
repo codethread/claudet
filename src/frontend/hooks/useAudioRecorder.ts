@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from 'react';
 
-type RecordingState = "idle" | "recording" | "uploading" | "transcribing" | "error";
+type RecordingState = 'idle' | 'recording' | 'uploading' | 'transcribing' | 'error';
 
 interface UseAudioRecorderReturn {
 	state: RecordingState;
@@ -10,7 +10,7 @@ interface UseAudioRecorderReturn {
 }
 
 export function useAudioRecorder(): UseAudioRecorderReturn {
-	const [state, setState] = useState<RecordingState>("idle");
+	const [state, setState] = useState<RecordingState>('idle');
 	const [error, setError] = useState<string | null>(null);
 
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -27,7 +27,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
 			// Create MediaRecorder with WebM/Opus (Chromium default)
 			const mediaRecorder = new MediaRecorder(stream, {
-				mimeType: "audio/webm;codecs=opus",
+				mimeType: 'audio/webm;codecs=opus',
 			});
 			mediaRecorderRef.current = mediaRecorder;
 
@@ -43,12 +43,11 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
 			// Start recording
 			mediaRecorder.start();
-			setState("recording");
+			setState('recording');
 		} catch (err) {
-			const message =
-				err instanceof Error ? err.message : "Failed to start recording";
+			const message = err instanceof Error ? err.message : 'Failed to start recording';
 			setError(message);
-			setState("error");
+			setState('error');
 			throw err;
 		}
 	}, []);
@@ -56,8 +55,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 	const stopRecording = useCallback(async (): Promise<string> => {
 		return new Promise((resolve, reject) => {
 			const mediaRecorder = mediaRecorderRef.current;
-			if (!mediaRecorder || mediaRecorder.state === "inactive") {
-				reject(new Error("No active recording"));
+			if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+				reject(new Error('No active recording'));
 				return;
 			}
 
@@ -66,47 +65,46 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 				try {
 					// Cleanup media stream
 					if (streamRef.current) {
-						streamRef.current.getTracks().forEach((track) => track.stop());
+						streamRef.current.getTracks().forEach((track) => {
+							track.stop();
+						});
 						streamRef.current = null;
 					}
 
 					// Create audio blob
 					const audioBlob = new Blob(chunksRef.current, {
-						type: "audio/webm",
+						type: 'audio/webm',
 					});
 
 					// Check file size (must be > 1000 bytes like PersonalConfigs script)
 					if (audioBlob.size < 1000) {
-						throw new Error("Recording too short or empty");
+						throw new Error('Recording too short or empty');
 					}
 
 					// Upload and transcribe
-					setState("uploading");
+					setState('uploading');
 
 					const formData = new FormData();
-					formData.append("audio", audioBlob, "recording.webm");
+					formData.append('audio', audioBlob, 'recording.webm');
 
-					const response = await fetch("/api/transcribe", {
-						method: "POST",
+					const response = await fetch('/api/transcribe', {
+						method: 'POST',
 						body: formData,
 					});
 
 					if (!response.ok) {
-						throw new Error(
-							`Transcription failed: ${response.status} ${response.statusText}`,
-						);
+						throw new Error(`Transcription failed: ${response.status} ${response.statusText}`);
 					}
 
-					setState("transcribing");
+					setState('transcribing');
 					const data = await response.json();
 
-					setState("idle");
+					setState('idle');
 					resolve(data.text);
 				} catch (err) {
-					const message =
-						err instanceof Error ? err.message : "Transcription failed";
+					const message = err instanceof Error ? err.message : 'Transcription failed';
 					setError(message);
-					setState("error");
+					setState('error');
 					reject(err);
 				}
 			};
