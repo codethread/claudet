@@ -173,16 +173,27 @@ export function createClaudeRunnerMachine(
           actions: ({ context, event }) => {
             const line = event.line;
 
-            // Broadcast to WebSocket clients with session ID
+            // Broadcast to Socket.IO clients with session ID
             for (const client of context.logClients) {
               try {
-                // Wrap the message with session metadata
-                const message = JSON.stringify({
-                  type: "log",
-                  sessionId: context.sessionId,
-                  data: line,
-                });
-                client.send(message);
+                // Socket.IO: emit as JSON object (no need to stringify)
+                // For backward compatibility with WebSocket clients, also support .send()
+                if (typeof client.emit === "function") {
+                  // Socket.IO client
+                  client.emit("log", {
+                    type: "log",
+                    sessionId: context.sessionId,
+                    data: line,
+                  });
+                } else if (typeof client.send === "function") {
+                  // Native WebSocket client (backward compatibility)
+                  const message = JSON.stringify({
+                    type: "log",
+                    sessionId: context.sessionId,
+                    data: line,
+                  });
+                  client.send(message);
+                }
               } catch (e) {
                 console.error("Failed to send to client:", e);
                 context.logClients.delete(client);

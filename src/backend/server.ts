@@ -2,10 +2,15 @@ import index from "../frontend/index.html";
 import qrcode from "qrcode-terminal";
 import { networkInterfaces } from "os";
 import { existsSync } from "fs";
+import { unlink } from "fs/promises";
+import { homedir } from "os";
+import { join } from "path";
 import { RealClaudeCodeService } from "./services";
 import type { ClaudeCodeService } from "./services/ClaudeCodeService";
 import { SessionManager } from "./SessionManager";
 import type { ClaudeResponse } from "./claudeRunner";
+import { Server as Engine } from "@socket.io/bun-engine";
+import { Server } from "socket.io";
 
 // Get local network IP address
 function getLocalIP(): string {
@@ -167,6 +172,72 @@ async function sendToClaude(
   });
 }
 
+// Transcription configuration
+const WHISPER_MODEL = join(homedir(), "dev/models/ggml-medium.bin");
+
+// Transcribe audio file using whisper-cli
+async function transcribeAudioFile(audioPath: string): Promise<string> {
+  // Check file size (must be > 1000 bytes like PersonalConfigs script)
+  const audioFile = Bun.file(audioPath);
+  const fileSize = audioFile.size;
+
+  if (fileSize < 1000) {
+    throw new Error("Recording too short or empty");
+  }
+
+  // Check if whisper model exists
+  if (!existsSync(WHISPER_MODEL)) {
+    throw new Error(`Whisper model not found at ${WHISPER_MODEL}`);
+  }
+
+  // Convert WebM to WAV using ffmpeg
+  const wavPath = audioPath.replace(/\.\w+$/, ".wav");
+  const ffmpegProc = Bun.spawn([
+    "ffmpeg",
+    "-i",
+    audioPath,
+    "-ar",
+    "16000", // 16kHz sample rate
+    "-ac",
+    "1", // mono
+    "-f",
+    "wav",
+    wavPath,
+  ], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  await ffmpegProc.exited;
+
+  if (ffmpegProc.exitCode !== 0) {
+    throw new Error("Failed to convert audio to WAV format");
+  }
+
+  // Run whisper-cli transcription
+  const whisperProc = Bun.spawn(
+    ["whisper-cli", "-m", WHISPER_MODEL, "-nt", "-np", wavPath],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  // Collect transcription output
+  const transcription = await new Response(whisperProc.stdout).text();
+
+  await whisperProc.exited;
+
+  if (whisperProc.exitCode !== 0) {
+    throw new Error("Whisper transcription failed");
+  }
+
+  // Clean up WAV file
+  await unlink(wavPath).catch(() => {});
+
+  return transcription.trim();
+}
+
 export interface StartServerOptions {
   /**
    * Optional ClaudeCodeService for dependency injection (testing)
@@ -194,7 +265,65 @@ export function startServer(options: StartServerOptions = {}) {
     process.exit(1);
   }
 
+  // Initialize Socket.IO with Bun engine
+  const io = new Server();
+  const engine = new Engine({ path: "/socket.io/" });
+  io.bind(engine);
+
+  // Socket.IO connection handler
+  io.on("connection", (socket) => {
+    console.log("✅ Socket.IO client connected:", socket.id);
+
+    // Register this client with all sessions
+    const sessions = sessionManager.listSessions();
+    for (const { id } of sessions) {
+      const session = sessionManager.getSession(id);
+      if (session) {
+        session.actor.send({ type: "REGISTER_WS_CLIENT", client: socket });
+      }
+    }
+
+    // Send connection confirmation with list of sessions
+    socket.emit("connection", {
+      type: "connection",
+      status: "connected",
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        model: s.model,
+        createdAt: s.createdAt,
+      })),
+      timestamp: new Date().toISOString(),
+    });
+
+    // Handle chat messages (for future use)
+    socket.on("chat:message", async (data, callback) => {
+      console.log("📨 Socket.IO received chat:message:", data);
+      // Echo back for now (can add proper handling later)
+      if (callback) {
+        callback({ status: "ok" });
+      }
+    });
+
+    // Handle disconnection
+    socket.on("disconnect", (reason) => {
+      console.log("❌ Socket.IO client disconnected:", socket.id, reason);
+
+      // Unregister from all sessions
+      const sessions = sessionManager.listSessions();
+      for (const { id } of sessions) {
+        const session = sessionManager.getSession(id);
+        if (session) {
+          session.actor.send({ type: "UNREGISTER_WS_CLIENT", client: socket });
+        }
+      }
+    });
+  });
+
   const server = Bun.serve({
+    // Integrate Socket.IO engine with Bun.serve first
+    ...engine.handler(),
+
+    // Override with our specific settings
     hostname: "0.0.0.0", // Listen on all network interfaces
     port: 3000,
     idleTimeout: 120, // 120 seconds to allow for longer Claude responses
@@ -203,70 +332,19 @@ export function startServer(options: StartServerOptions = {}) {
       key: Bun.file("./certs/localhost+3-key.pem"),
     },
 
-    websocket: {
-      open(ws) {
-        // Register this client with all sessions
-        // Note: In a production app, you'd want to track which sessions
-        // the client is subscribed to, but for simplicity we'll broadcast to all
-        const sessions = sessionManager.listSessions();
-        for (const { id } of sessions) {
-          const session = sessionManager.getSession(id);
-          if (session) {
-            session.actor.send({ type: "REGISTER_WS_CLIENT", client: ws });
-          }
-        }
-
-        console.log("✅ WebSocket client connected");
-
-        // Send connection confirmation with list of sessions
-        ws.send(
-          JSON.stringify({
-            type: "connection",
-            status: "connected",
-            sessions: sessions.map((s) => ({
-              id: s.id,
-              model: s.model,
-              createdAt: s.createdAt,
-            })),
-            timestamp: new Date().toISOString(),
-          }),
-        );
-      },
-      message(ws, message) {
-        console.log("📨 WebSocket received message:", message);
-        // Echo back for now (can add commands later)
-        ws.send(`Echo: ${message}`);
-      },
-      close(ws) {
-        // Unregister from all sessions
-        const sessions = sessionManager.listSessions();
-        for (const { id } of sessions) {
-          const session = sessionManager.getSession(id);
-          if (session) {
-            session.actor.send({ type: "UNREGISTER_WS_CLIENT", client: ws });
-          }
-        }
-        console.log("❌ WebSocket client disconnected");
-      },
-    },
-
     routes: {
-      "/ws": {
-        async GET(req, server) {
-          const success = server.upgrade(req);
-          if (success) {
-            return undefined;
-          }
-          return new Response("WebSocket upgrade failed", { status: 500 });
-        },
-      },
-
-      "/sw.js": Bun.file("./src/frontend/sw.js"),
-      "/src/manifest.json": Bun.file("./src/frontend/manifest.json"),
       "/logo.svg": Bun.file("./src/frontend/assets/logo.svg"),
-      "/icon-180.png": Bun.file("./src/frontend/assets/gen/icon-180.png"),
-      "/icon-192.png": Bun.file("./src/frontend/assets/gen/icon-192.png"),
-      "/icon-512.png": Bun.file("./src/frontend/assets/gen/icon-512.png"),
+
+      // PWA Routes
+      "/sw.js": Bun.file("./src/frontend/sw.js"),
+      "/manifest.json": Bun.file("./src/frontend/manifest.json"),
+      "/icon-180.png": Bun.file("./src/frontend/assets/icon-180.png"),
+      "/icon-192.png": Bun.file("./src/frontend/assets/icon-192.png"),
+      "/icon-512.png": Bun.file("./src/frontend/assets/icon-512.png"),
+      "/apple-touch-icon.png": Bun.file("./src/frontend/assets/icon-180.png"),
+      "/assets/gen/icon-180.png": Bun.file("./src/frontend/assets/gen/icon-180.png"),
+      "/assets/gen/icon-192.png": Bun.file("./src/frontend/assets/gen/icon-192.png"),
+      "/assets/gen/icon-512.png": Bun.file("./src/frontend/assets/gen/icon-512.png"),
 
       // Serve index.html for all unmatched routes.
       "/*": index,
@@ -333,6 +411,50 @@ export function startServer(options: StartServerOptions = {}) {
               },
               { status: 500 },
             );
+          }
+        },
+      },
+
+      "/api/transcribe": {
+        async POST(req) {
+          let tempAudioPath: string | null = null;
+
+          try {
+            // Parse FormData
+            const formData = await req.formData();
+            const audioFile = formData.get("audio") as File | null;
+
+            if (!audioFile) {
+              return Response.json(
+                { error: "No audio file provided" },
+                { status: 400 },
+              );
+            }
+
+            // Save to temp file
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const ext = audioFile.name.split(".").pop() || "webm";
+            tempAudioPath = join("/tmp", `recording_${timestamp}.${ext}`);
+
+            await Bun.write(tempAudioPath, audioFile);
+
+            // Transcribe the audio
+            const transcription = await transcribeAudioFile(tempAudioPath);
+
+            return Response.json({ text: transcription });
+          } catch (error) {
+            console.error("Error in /api/transcribe:", error);
+            return Response.json(
+              {
+                error: error instanceof Error ? error.message : "Transcription failed",
+              },
+              { status: 500 },
+            );
+          } finally {
+            // Clean up temp audio file
+            if (tempAudioPath) {
+              await unlink(tempAudioPath).catch(() => {});
+            }
           }
         },
       },

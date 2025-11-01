@@ -9,9 +9,10 @@ This document provides a comprehensive overview of Claudet's architecture, techn
 - **Styling:** [Tailwind CSS 4](https://tailwindcss.com/) - Utility-first CSS framework
 - **Components:** [shadcn/ui](https://ui.shadcn.com/) - Re-usable components built with Radix UI
 - **State Management:** [XState 5](https://stately.ai/docs/xstate) - State machines for both backend and frontend
+- **Real-Time:** [Socket.IO](https://socket.io/) - WebSocket communication with auto-reconnection
 - **AI Integration:** Claude Code CLI - Persistent session with streaming I/O
+- **PWA:** Progressive Web App with service worker, offline support, and installability
 - **Testing:** Bun test runner (unit) + [Playwright](https://playwright.dev/) (E2E)
-- **PWA:** Service Worker + Web App Manifest - Offline-first progressive web app
 
 ## Server Architecture
 
@@ -51,16 +52,243 @@ Server imports `index.html` which includes `<script type="module" src="./fronten
 - `/api/chat` - POST endpoint for Claude interactions
 - `/api/models` - GET endpoint for available models
 - `/api/sessions` - GET/POST endpoints for session management
-- `/ws` - WebSocket upgrade endpoint
-- PWA assets: `/manifest.json`, `/sw.js`, icons
+- `/api/transcribe` - POST endpoint for audio transcription (voice dictation)
+- `/socket.io/` - Socket.IO endpoint for real-time communication (WebSocket)
+- `/sw.js` - Service worker script
+- `/manifest.json` - PWA manifest
+- `/icon-*.png` - PWA icons (180, 192, 512)
+- `/apple-touch-icon.png` - Apple touch icon
 
 ## Frontend Architecture
 
 - **React 19** with TypeScript
 - **Tailwind CSS 4** for styling (uses `bun-plugin-tailwind`)
 - **shadcn/ui** components in `src/components/ui/`
-- **PWA Support**: Service worker, manifest, and icon generation
 - Path alias: `@/*` maps to `./src/*`
+
+### Real-Time Communication with Socket.IO
+
+The application uses Socket.IO for reliable real-time communication with automatic reconnection and built-in heartbeat mechanisms.
+
+#### useSocket Hook
+
+Location: `src/frontend/hooks/useSocket.ts`
+
+**Key Features:**
+- **Automatic reconnection** with exponential backoff (built into Socket.IO)
+- **Built-in heartbeat** via Socket.IO's ping/pong mechanism
+- **iOS Safari support** via `visibilitychange` event to force reconnect when page becomes visible
+- **Test environment detection** to suppress error logging during automated tests
+- **Simple API**: Returns `{ socket, connected, error }`
+
+**Socket.IO Advantages:**
+- Eliminates need for custom reconnection logic (handled internally)
+- No manual ping/pong implementation needed
+- Automatic exponential backoff (500ms → 30s)
+- Industry-standard protocol with wide browser support
+- Handles connection edge cases automatically
+
+**Usage Pattern:**
+```typescript
+const { socket, connected, error } = useSocket({ url: "/" });
+
+useEffect(() => {
+  if (!socket) return;
+
+  socket.on("connection", (data) => {
+    // Handle server connection message
+  });
+
+  socket.on("log", (data) => {
+    // Handle log messages
+  });
+
+  return () => {
+    socket.off("connection");
+    socket.off("log");
+  };
+}, [socket]);
+```
+
+#### Server-Side Implementation
+
+Location: `src/backend/server.ts`
+
+The server uses `@socket.io/bun-engine` to integrate Socket.IO with Bun:
+
+```typescript
+import { Server as Engine } from "@socket.io/bun-engine";
+import { Server } from "socket.io";
+
+const io = new Server();
+const engine = new Engine({ path: "/socket.io/" });
+io.bind(engine);
+
+io.on("connection", (socket) => {
+  // Handle client connection
+  socket.on("chat:message", (data) => {
+    // Handle messages
+  });
+
+  socket.on("disconnect", () => {
+    // Handle disconnection
+  });
+});
+```
+
+**Message Broadcasting:**
+- Server broadcasts log messages via `socket.emit("log", data)`
+- Connection confirmation sent via `socket.emit("connection", data)`
+- Backward compatible with native WebSocket clients using `socket.send()`
+
+#### State Machine Integration
+
+Location: `src/frontend/chatMachine.ts`
+
+The chat state machine integrates with Socket.IO:
+- **disconnected** - No connection, waiting for initial connection
+- **reconnecting** - Attempting to reconnect (Socket.IO handles this automatically)
+- **idle** - Connected and ready for messages
+- **sending** - Sending message to server
+
+Events:
+- `WEBSOCKET_CONNECTED` - Connection established, transition to idle
+- `WEBSOCKET_DISCONNECTED` - Connection lost, transition to reconnecting
+- `WEBSOCKET_ERROR` - Track connection errors
+- `WEBSOCKET_MESSAGE` - Receive messages from server
+
+#### iOS Safari Support
+
+**Page Visibility Handling:**
+- iOS Safari suspends JavaScript execution when device locks or app backgrounds
+- `visibilitychange` event listener detects when page becomes visible again
+- Forces Socket.IO to reconnect if disconnected while page was hidden
+- Most reliable method for iOS Safari (other events unreliable)
+
+**Race Condition Handling:**
+- Check `socket.connected` when registering event listeners
+- Ensures state machine receives `WEBSOCKET_CONNECTED` even if connection established before listeners registered
+- Critical for E2E test reliability
+
+**Testing Scenarios:**
+- Lock device for 30 seconds, unlock → `visibilitychange` triggers reconnect
+- Switch to another app, return → `visibilitychange` triggers reconnect
+- Switch tabs in Safari, return → handled by Socket.IO's reconnection
+- Network interruptions → Socket.IO auto-reconnects with exponential backoff
+
+### Mobile-First UI Layout
+
+The application uses a modern, mobile-friendly layout with sliding sidebars powered by shadcn/ui Sheet components.
+
+#### Layout Structure
+
+1. **Top Bar** (`src/frontend/APITester.tsx`):
+   - Left: Hamburger menu button (opens settings sidebar)
+   - Center: "Good morning, Adam" heading
+   - Right: Plus icon button (creates new sessions)
+
+2. **Left Sidebar - Settings Panel**:
+   - Opens from left edge on mobile/desktop
+   - Width: 300px on desktop, 75% screen width on mobile
+   - Contains:
+     - Theme toggle (Light/Dark/System)
+     - Model selector (Haiku/Sonnet dropdown)
+     - Session list with visual selection indicator
+     - Connection status badge (green/red)
+   - Auto-closes after selecting a session
+
+3. **Right Sidebar - Logs Panel**:
+   - Opens from right edge on mobile/desktop
+   - Width: 400px on desktop, full width on mobile
+   - Displays JSON logs from Claude CLI responses
+   - Opens automatically when clicking a message with logs
+   - Shows formatted JSON with syntax highlighting
+
+4. **Main Chat Area**:
+   - Centered layout with max-width for readability
+   - User messages: Light background, left-aligned with margin
+   - Assistant messages: Muted background, right-aligned with margin
+   - Messages show "X logs • click to view" indicator
+   - Clickable messages open logs in right sidebar
+
+5. **Input Section**:
+   - Fixed at bottom with border-top
+   - Large input field with rounded corners
+   - Mic button positioned inside input (bottom right)
+   - Send button (→) as circular icon button
+   - Disabled state when loading or disconnected
+
+#### Components
+
+- **Sheet Component** (`src/frontend/components/ui/sheet.tsx`):
+  - Based on Radix UI Dialog primitive
+  - Supports four sides: `left`, `right`, `top`, `bottom`
+  - Includes overlay with backdrop blur
+  - Smooth slide-in/out animations
+  - Accessible with keyboard navigation and ARIA labels
+  - Dependencies: `@radix-ui/react-dialog`
+
+#### Responsive Behavior
+
+- **Desktop (≥640px)**:
+  - Sidebars have fixed widths
+  - Chat area centered with max-width
+  - All controls visible and accessible
+
+- **Mobile (<640px)**:
+  - Left sidebar: 75% width
+  - Right sidebar: Full width
+  - Sidebars overlay main content
+  - Larger touch targets (44px minimum)
+  - Bottom input area with safe area insets
+
+### Voice Dictation Feature
+
+The application includes voice dictation for hands-free message input using the Web Audio API and server-side transcription.
+
+#### Architecture
+
+1. **useAudioRecorder Hook** (`src/frontend/hooks/useAudioRecorder.ts`):
+   - Encapsulates MediaRecorder API for audio recording
+   - State management: `idle`, `recording`, `uploading`, `transcribing`, `error`
+   - Records audio in WebM/Opus format (Chromium default)
+   - Uploads audio to `/api/transcribe` endpoint
+   - Validates recording size (minimum 1000 bytes)
+
+2. **MicButton Component** (`src/frontend/components/MicButton.tsx`):
+   - Visual recording button with state indicators
+   - Icons: Mic (idle), Square (recording), Loader (processing)
+   - Recording state shown with red pulsing animation
+   - Error display for permission/transcription failures
+   - Accessible with ARIA labels
+
+3. **Text Insertion** (`src/frontend/APITester.tsx`):
+   - Inserts transcribed text at cursor position in input field
+   - Preserves cursor position after insertion
+   - Maintains focus on input after transcription
+
+4. **Server-Side Transcription** (`src/backend/server.ts`):
+   - Receives audio via FormData upload
+   - Converts WebM to WAV using ffmpeg
+   - Transcribes with whisper-cli (whisper.cpp)
+   - Uses model at `~/dev/models/ggml-medium.bin`
+   - Automatic cleanup of temporary files
+
+#### Usage Flow
+
+1. User clicks microphone button
+2. Browser requests microphone permission (first time only)
+3. Recording starts (button turns red and pulses)
+4. User clicks square button to stop
+5. Audio uploads to server
+6. Server converts format and runs transcription
+7. Text inserts at cursor position in input field
+
+#### Requirements
+
+- **Browser**: Modern Chromium-based browser with MediaRecorder API support
+- **Server**: ffmpeg and whisper-cli installed (`brew install ffmpeg whisper-cpp`)
+- **Model**: Whisper model at `~/dev/models/ggml-medium.bin`
 
 ### Dark Mode Implementation
 
@@ -103,6 +331,100 @@ const { theme, setTheme } = useTheme();
 </div>
 ```
 
+### Progressive Web App (PWA)
+
+The application is a full Progressive Web App, providing offline support, installability, and automatic updates.
+
+#### Architecture
+
+1. **Service Worker** (`src/frontend/sw.js`):
+   - Handles offline caching of static assets
+   - Caches PWA icons and essential resources
+   - Provides runtime caching for JS/CSS/images
+   - Skips caching for API and WebSocket requests
+   - Automatic cache cleanup on activation
+
+2. **PWA Manifest** (`src/frontend/manifest.json`):
+   - App metadata (name, description, colors)
+   - Icon references (180, 192, 512px)
+   - Standalone display mode for app-like experience
+   - Portrait-primary orientation preference
+
+3. **UpdateBanner Component** (`src/frontend/components/UpdateBanner.tsx`):
+   - Detects when new service worker version is available
+   - Shows notification banner at top of page
+   - Allows user to refresh and activate update
+   - Dismissible for later installation
+   - Automatically reloads page when update is activated
+
+4. **Service Worker Registration** (`src/frontend/index.html`):
+   - Registers service worker on page load
+   - Checks for updates every 60 seconds
+   - Handles registration errors gracefully
+   - Console logging for debugging
+
+5. **PWA Meta Tags** (`src/frontend/index.html`):
+   - Theme color for browser chrome
+   - Apple mobile web app meta tags
+   - Manifest link
+   - Apple touch icon reference
+
+6. **Icon Generation** (`scripts/generate-pwa-icons.js`):
+   - Generates icons from SVG source (`src/frontend/assets/icon.svg`)
+   - Creates 180px (Apple), 192px (standard), 512px (large) icons
+   - Outputs to both `assets/` and `assets/gen/` directories
+   - Uses ImageMagick for conversion
+   - Run via `bun run generate:icons` or `bun run setup`
+
+#### Installation and Updates
+
+**First-Time Setup:**
+```bash
+bun run setup  # Generates HTTPS certs + PWA icons
+```
+
+**Icon Regeneration:**
+```bash
+bun run generate:icons  # Regenerate PWA icons from icon.svg
+```
+
+**Installing the PWA:**
+1. Open app in supported browser (Chrome, Edge, Safari)
+2. Click install prompt or use browser's "Install" menu
+3. App appears as standalone application
+
+**Update Flow:**
+1. User visits app
+2. Service worker checks for updates (every 60s)
+3. If new version available, UpdateBanner appears
+4. User clicks "Refresh" button
+5. New service worker activates
+6. Page automatically reloads with new version
+
+#### Offline Support
+
+The service worker caches:
+- HTML pages (index.html)
+- PWA icons
+- Static assets (JS, CSS, images, fonts)
+
+Not cached:
+- API requests (`/api/*`)
+- WebSocket connections (`/ws`)
+- Dynamic content
+
+#### Requirements
+
+- **ImageMagick** for icon generation:
+  - macOS: `brew install imagemagick`
+  - Ubuntu: `sudo apt-get install imagemagick`
+
+#### Browser Support
+
+- **Chrome/Edge**: Full PWA support (install, offline, updates)
+- **Safari**: iOS 11.3+ supports PWA installation
+- **Firefox**: Service worker support, limited install UI
+
 ## Build System (scripts/build.ts)
 
 Custom build script with:
@@ -131,24 +453,42 @@ src/
 │       ├── FakeClaudeCodeService.ts      # Test mock implementation
 │       └── FakeClaudeCodeService.test.ts # Mock unit tests
 ├── frontend/
-│   ├── index.html             # HTML entry with React imports (includes FOUC script)
+│   ├── index.html             # HTML entry with React imports (includes FOUC script + SW registration)
 │   ├── frontend.tsx           # React root component (wraps with ThemeProvider)
-│   ├── App.tsx                # Main application component (includes ThemeToggle)
-│   ├── APITester.tsx          # Claude API testing UI
+│   ├── App.tsx                # Main application component wrapper (includes UpdateBanner)
+│   ├── APITester.tsx          # Claude API testing UI with sidebars (includes MicButton)
 │   ├── chatMachine.ts         # Frontend state machine
 │   ├── chatMachine.test.ts    # Frontend tests
+│   ├── sw.js                  # Service worker for PWA (offline caching + updates)
+│   ├── manifest.json          # PWA manifest (app metadata + icons)
 │   ├── components/
+│   │   ├── MicButton.tsx      # Voice dictation button
+│   │   ├── UpdateBanner.tsx   # PWA update notification banner
 │   │   ├── ThemeProvider.tsx  # Dark mode context provider
 │   │   ├── ThemeToggle.tsx    # Theme switcher button
 │   │   └── ui/                # shadcn/ui components
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── form.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       ├── select.tsx
+│   │       └── sheet.tsx      # Sidebar/drawer component
+│   ├── hooks/
+│   │   ├── useAudioRecorder.ts # Audio recording hook with MediaRecorder
+│   │   └── useSocket.ts         # Socket.IO connection hook
 │   ├── lib/utils.ts           # Utility functions (cn, etc.)
 │   ├── styles/globals.css     # Global styles with dark mode CSS variables
-│   ├── assets/
-│   │   ├── gen/               # Generated PWA icons (gitignored)
-│   │   ├── icon.svg           # Source icon for generation
-│   │   └── logo.svg           # App logo
-│   ├── manifest.json          # PWA manifest
-│   └── sw.js                  # Service worker
+│   └── assets/
+│       ├── icon.svg           # Source icon for PWA generation
+│       ├── icon-180.png       # Generated: Apple touch icon
+│       ├── icon-192.png       # Generated: PWA standard icon
+│       ├── icon-512.png       # Generated: PWA large icon
+│       ├── logo.svg           # App logo
+│       └── gen/               # Generated assets (alternate location)
+│           ├── icon-180.png
+│           ├── icon-192.png
+│           └── icon-512.png
 
 tests/
 ├── chat.spec.ts           # Playwright E2E tests (use FakeClaudeCodeService)
@@ -158,8 +498,8 @@ tests/
 
 scripts/
 ├── build.ts                  # Production build script
-├── generate-pwa-icons.js     # Icon generation from SVG (outputs to gen/)
-└── generate-certs.sh         # mkcert wrapper for HTTPS certificates
+├── generate-certs.sh         # mkcert wrapper for HTTPS certificates
+└── generate-pwa-icons.js     # PWA icon generator (SVG → PNG)
 
 docs/
 ├── bun.md                 # Bun guidelines (important reference)
@@ -249,33 +589,17 @@ E2E tests are located in `tests/` directory and use Playwright for browser autom
 - Review screenshots visually to confirm layout improvements
 - Use Playwright MCP tools during development for interactive testing
 
-## PWA & Assets
+## Generated Assets
 
-### Generated Assets
+### HTTPS Certificates
 
-All generated assets are located in gitignored directories and must be created during setup:
+Certificates are located in a gitignored directory and must be created during setup:
 
-1. **PWA Icons** (`src/frontend/assets/gen/`):
-   - Source: `src/frontend/assets/icon.svg`
-   - Generated sizes: 180px (Apple touch), 192px, 512px
-   - Command: `bun run generate:icons` (requires ImageMagick)
-   - Output: `src/frontend/assets/gen/icon-{180,192,512}.png`
-
-2. **HTTPS Certificates** (`certs/`):
-   - Generated via mkcert (self-signed local CA)
-   - Command: `bun run generate:certs` (requires mkcert)
-   - Output: `certs/localhost+3.pem` and `certs/localhost+3-key.pem`
-   - Server validates certificate existence on startup
-
-### First-Time Setup
-
-Run `bun run setup` to generate both certificates and icons in one command.
-
-### Service Worker
-
-- Handles offline caching and PWA installation
-- Caches PWA icons via public URLs (`/icon-192.png`, `/icon-512.png`)
-- Located at `src/frontend/sw.js`
+- **Location**: `certs/`
+- **Tool**: Generated via mkcert (self-signed local CA)
+- **Command**: `bun run generate:certs` or `bun run setup` (requires mkcert)
+- **Output**: `certs/localhost+3.pem` and `certs/localhost+3-key.pem`
+- Server validates certificate existence on startup and provides helpful error if missing
 
 ## API Endpoints
 
@@ -286,6 +610,5 @@ Run `bun run setup` to generate both certificates and icons in one command.
 | `/api/models` | GET | Get available Claude models and default model |
 | `/api/sessions` | GET | List all Claude sessions |
 | `/api/sessions` | POST | Create a new Claude session |
-| `/ws` | WebSocket | Real-time log streaming |
-| `/manifest.json` | GET | PWA manifest |
-| `/sw.js` | GET | Service worker |
+| `/api/transcribe` | POST | Upload audio for transcription (returns JSON with `text` field) |
+| `/socket.io/` | WebSocket | Socket.IO endpoint for real-time communication |

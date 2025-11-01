@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Complete project structure and file organization
 - Server and frontend architecture details
 - Dark mode implementation
+- PWA implementation (service worker, offline support, updates)
 - Testing strategies and best practices
 - Technology stack and configuration
 

@@ -7,27 +7,16 @@
             content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
         />
 
-        <!-- PWA Meta Tags -->
         <meta name="description" content="Chat with Claude AI assistant" />
-        <meta name="theme-color" content="#000000" />
-        <meta name="version" content="0.0.1" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta
-            name="apple-mobile-web-app-status-bar-style"
-            content="black-translucent"
-        />
-        <meta name="apple-mobile-web-app-title" content="Claude Chats" />
-
-        <!-- Icons -->
         <link rel="icon" type="image/svg+xml" href="./assets/logo.svg" />
-        <link
-            rel="apple-touch-icon"
-            sizes="180x180"
-            href="./assets/gen/icon-180.png"
-        />
 
-        <!-- PWA Manifest -->
+        <!-- PWA Meta Tags -->
         <link rel="manifest" href="./manifest.json" />
+        <meta name="theme-color" content="#000000" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Claude" />
+        <link rel="apple-touch-icon" href="./assets/icon-180.png" />
 
         <title>Claude Chat</title>
 
@@ -54,8 +43,6 @@
             })();
         </script>
 
-        <script type="module" src="./frontend.tsx" async></script>
-
         <!-- Service Worker Registration -->
         <script>
             if ("serviceWorker" in navigator) {
@@ -63,14 +50,27 @@
                     navigator.serviceWorker
                         .register("/sw.js")
                         .then((registration) => {
-                            console.log("SW registered:", registration);
+                            console.log(
+                                "Service Worker registered:",
+                                registration.scope,
+                            );
+
+                            // Check for updates every 60 seconds
+                            setInterval(() => {
+                                registration.update();
+                            }, 60000);
                         })
                         .catch((error) => {
-                            console.log("SW registration failed:", error);
+                            console.error(
+                                "Service Worker registration failed:",
+                                error,
+                            );
                         });
                 });
             }
         </script>
+
+        <script type="module" src="./frontend.tsx" async></script>
     </head>
     <body>
         <div id="root"></div>

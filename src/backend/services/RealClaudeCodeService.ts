@@ -1,4 +1,8 @@
-import type { ClaudeCodeService, ClaudeProcessHandle, ClaudeModel } from "./ClaudeCodeService";
+import type {
+  ClaudeCodeService,
+  ClaudeProcessHandle,
+  ClaudeModel,
+} from "./ClaudeCodeService";
 
 /**
  * RealClaudeCodeService - Production implementation using actual Claude CLI
@@ -17,6 +21,7 @@ export class RealClaudeCodeService implements ClaudeCodeService {
         "--verbose",
         "--input-format=stream-json",
         "--output-format=stream-json",
+        "--dangerously-skip-permissions",
         `--model=${model}`,
       ],
       {

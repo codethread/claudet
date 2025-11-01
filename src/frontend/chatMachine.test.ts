@@ -89,10 +89,10 @@ describe("chatMachine", () => {
         expectedError: null,
       },
       {
-        name: "from idle to disconnected on WEBSOCKET_DISCONNECTED",
+        name: "from idle to reconnecting on WEBSOCKET_DISCONNECTED",
         initialState: "idle",
         event: { type: "WEBSOCKET_DISCONNECTED" } as const,
-        expectedState: "disconnected",
+        expectedState: "reconnecting",
         expectedError: null,
       },
       {
