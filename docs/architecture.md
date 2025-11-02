@@ -180,6 +180,15 @@ Events:
 
 The application uses a modern, mobile-friendly layout with sliding sidebars powered by shadcn/ui Sheet components.
 
+#### Layout Strategy
+
+The app uses a **responsive viewport layout** optimized for both desktop and mobile devices, with special handling for iOS Safari keyboard behavior:
+
+- **Viewport meta tag**: `interactive-widget=resizes-content` tells iOS Safari to resize the viewport (rather than push content up) when the keyboard appears
+- **Body styling**: Fixed height (`100vh`/`100dvh`) with `overflow: hidden` prevents page scrolling
+- **Root container**: Flexbox column layout with safe area insets for iOS notch/home indicator
+- **Dynamic viewport height**: Uses `dvh` (dynamic viewport height) units for proper mobile browser support
+
 #### Layout Structure
 
 1. **Top Bar** (`src/frontend/APITester.tsx`):
@@ -206,14 +215,19 @@ The application uses a modern, mobile-friendly layout with sliding sidebars powe
 
 4. **Main Chat Area**:
    - Centered layout with max-width for readability
+   - Scrollable container with `flex-1 min-h-0` for proper overflow
    - User messages: Light background, left-aligned with margin
    - Assistant messages: Muted background, right-aligned with margin
    - Messages show "X logs • click to view" indicator
    - Clickable messages open logs in right sidebar
 
 5. **Input Section**:
-   - Fixed at bottom with border-top
-   - Large input field with rounded corners
+   - Fixed at bottom with border-top using `flex-shrink-0`
+   - **Growing textarea**:
+     - Starts at minimum height of 48px
+     - Grows automatically as user types multi-line messages
+     - Maximum height of 200px before internal scrolling
+     - Auto-resize handled by JavaScript in `useEffect`
    - Mic button positioned inside input (bottom right)
    - Send button (→) as circular icon button
    - Disabled state when loading or disconnected

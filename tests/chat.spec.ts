@@ -157,4 +157,72 @@ test.describe('Claude Chat Interface', () => {
 		const messages = page.locator('[class*="rounded-xl"]').filter({ hasText: /You|Claude/ });
 		await expect(messages).toHaveCount(2, { timeout: 2000 });
 	});
+
+	test('should allow typing a long multi-line message that grows the input area', async ({
+		page,
+	}) => {
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+
+		const input = page.getByTestId('chat-input');
+
+		// Measure initial input height
+		const initialBox = await input.boundingBox();
+		const initialHeight = initialBox?.height || 0;
+
+		// Type a multi-line message
+		const multiLineMessage =
+			'This is line 1\nThis is line 2\nThis is line 3\nThis is line 4\nThis is line 5';
+		await input.fill(multiLineMessage);
+
+		// Wait a moment for any resize animations
+		await page.waitForTimeout(200);
+
+		// Input should have grown to accommodate the text
+		const grownBox = await input.boundingBox();
+		const grownHeight = grownBox?.height || 0;
+		expect(grownHeight).toBeGreaterThan(initialHeight);
+
+		// User should still be able to see their message
+		await expect(input).toHaveValue(multiLineMessage);
+
+		// Send button should still be visible and clickable
+		await expect(sendButton).toBeVisible();
+	});
+
+	test('should handle very long messages by scrolling the input area', async ({ page }) => {
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+
+		const input = page.getByTestId('chat-input');
+
+		// Type a very long message (20 lines)
+		const veryLongMessage = Array.from(
+			{ length: 20 },
+			(_, i) => `This is line ${i + 1} of a very long message`,
+		).join('\n');
+		await input.fill(veryLongMessage);
+
+		// Wait for any resize animations
+		await page.waitForTimeout(200);
+
+		// User should still be able to see the input field and interact with it
+		await expect(input).toBeVisible();
+		await expect(input).toHaveValue(veryLongMessage);
+
+		// Send button should still be visible and clickable
+		await expect(sendButton).toBeVisible();
+		await expect(sendButton).toBeEnabled();
+
+		// User should be able to clear and type new text
+		await input.clear();
+		await input.fill('New shorter message');
+		await expect(input).toHaveValue('New shorter message');
+	});
 });
