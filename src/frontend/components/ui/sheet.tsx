@@ -33,12 +33,12 @@ const sheetContentVariants = cva(
 	{
 		variants: {
 			side: {
-				top: 'inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
+				top: 'inset-x-0 top-0 pt-safe border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
 				bottom:
-					'inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
-				left: 'inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:w-[300px]',
+					'inset-x-0 bottom-0 pb-safe border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+				left: 'top-0 bottom-0 left-0 h-full w-3/4 pt-safe pb-safe pl-safe border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:w-[300px]',
 				right:
-					'inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:w-[400px]',
+					'top-0 bottom-0 right-0 h-full w-3/4 pt-safe pb-safe pr-safe border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:w-[400px]',
 			},
 		},
 		defaultVariants: {

@@ -240,6 +240,7 @@ The app uses a **responsive viewport layout** optimized for both desktop and mob
   - Includes overlay with backdrop blur
   - Smooth slide-in/out animations
   - Accessible with keyboard navigation and ARIA labels
+  - **Safe area support**: Uses `pt-safe`, `pb-safe`, `pl-safe`, `pr-safe` utilities to respect iOS notch/home indicator
   - Dependencies: `@radix-ui/react-dialog`
 
 #### Responsive Behavior
