@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { createActor, fromPromise } from 'xstate';
 import type { Socket } from 'socket.io';
 import { claudeRunnerMachine } from './claudeRunner';

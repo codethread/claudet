@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'bun:test';
 import { createActor, fromPromise } from 'xstate';
 import type { Socket } from 'socket.io-client';
 import {
@@ -125,7 +125,7 @@ describe('chatMachine', () => {
 			name: string;
 			initialState: string;
 			event: ChatMachineEvent;
-			expectedState: string;
+			expectedState: 'idle' | 'disconnected' | 'reconnecting' | 'sending' | 'creatingSession';
 			expectedError: string | null;
 		}>)('$name', async ({ initialState, event, expectedState, expectedError }) => {
 			const actor = createTestActor();
