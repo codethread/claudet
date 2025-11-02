@@ -305,6 +305,51 @@ The application includes voice dictation for hands-free message input using the 
 - **Server**: ffmpeg and whisper-cli installed (`brew install ffmpeg whisper-cpp`)
 - **Model**: Whisper model at `~/dev/models/ggml-medium.bin`
 
+### Markdown Rendering in Chat Messages
+
+The application renders markdown in all chat messages (both user and assistant messages) to improve readability and support rich formatting.
+
+#### Architecture
+
+1. **MarkdownMessage Component** (`src/frontend/components/MarkdownMessage.tsx`):
+   - Uses `markdown-to-jsx` library (7.5KB gzipped)
+   - Renders markdown as React components (not dangerouslySetInnerHTML)
+   - Built-in XSS protection through safe rendering
+   - Fully styled for both dark and light themes
+
+2. **Supported Markdown Features**:
+   - Headers (H1-H6) with appropriate sizing
+   - Bold text (`**bold**`)
+   - Italic text (`*italic*`)
+   - Inline code (`` `code` ``) with background styling
+   - Code blocks (` ```code``` `) with monospace font
+   - Unordered and ordered lists with proper indentation
+   - Links that open in new tabs with `rel="noopener noreferrer"`
+   - Blockquotes with left border accent
+
+3. **Custom Styling**:
+   - Links styled with primary color and hover effect
+   - Code blocks use muted background with padding
+   - Inline code has subtle background and rounded corners
+   - Headers have appropriate margin and font weight
+   - Lists use proper indentation and spacing
+   - All elements adapt to dark/light theme
+
+#### Usage
+
+The component is used in `APITester.tsx` to render all message content:
+
+```tsx
+<MarkdownMessage content={msg.content} />
+```
+
+#### Security
+
+- XSS protection built into markdown-to-jsx
+- Links automatically get `target="_blank"` and `rel="noopener noreferrer"`
+- No use of `dangerouslySetInnerHTML`
+- Safe HTML escaping by default
+
 ### Dark Mode Implementation
 
 The application supports three theme modes: `light`, `dark`, and `system` (follows OS preference).
@@ -478,6 +523,7 @@ src/
 │   ├── manifest.json          # PWA manifest (app metadata + icons)
 │   ├── components/
 │   │   ├── MicButton.tsx      # Voice dictation button
+│   │   ├── MarkdownMessage.tsx # Markdown renderer for chat messages
 │   │   ├── UpdateBanner.tsx   # PWA update notification banner
 │   │   ├── ThemeProvider.tsx  # Dark mode context provider
 │   │   ├── ThemeToggle.tsx    # Theme switcher button

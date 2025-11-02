@@ -37,7 +37,8 @@
 				"noNonNullAssertion": "off"
 			},
 			"suspicious": {
-				"noExplicitAny": "warn"
+				"noExplicitAny": "warn",
+				"noDuplicateProperties": "off"
 			}
 		}
 	},

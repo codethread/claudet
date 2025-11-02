@@ -225,4 +225,77 @@ test.describe('Claude Chat Interface', () => {
 		await input.fill('New shorter message');
 		await expect(input).toHaveValue('New shorter message');
 	});
+
+	test('should render markdown in chat messages', async ({ page }) => {
+		test.setTimeout(60000);
+
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+		await page.waitForTimeout(500);
+
+		// Send a message with markdown content
+		const input = page.getByTestId('chat-input');
+		await input.fill(
+			'Please respond with this markdown: **bold text**, *italic text*, `inline code`, and a link: [example](https://example.com)',
+		);
+		await sendButton.click();
+
+		// Wait for user message
+		await expect(page.getByText('Please respond with this markdown')).toBeVisible();
+
+		// Wait for response
+		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+
+		// Wait for assistant message to appear
+		await page.waitForTimeout(500);
+
+		// Verify markdown is rendered as HTML elements (not plain text)
+		// Check for bold text (both user and assistant messages will have markdown)
+		const boldElements = page.locator('strong');
+		await expect(boldElements.first()).toBeVisible();
+
+		// Check for italic text
+		const italicElements = page.locator('em');
+		await expect(italicElements.first()).toBeVisible();
+
+		// Check for inline code
+		const codeElements = page.locator('code');
+		await expect(codeElements.first()).toBeVisible();
+
+		// Check for link with correct attributes
+		const links = page.locator('a[target="_blank"][rel="noopener noreferrer"]');
+		await expect(links.first()).toBeVisible();
+		await expect(links.first()).toHaveAttribute('href', 'https://example.com');
+	});
+
+	test('should render code blocks with proper styling', async ({ page }) => {
+		test.setTimeout(60000);
+
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+		await page.waitForTimeout(500);
+
+		// Send a message requesting a code block
+		const input = page.getByTestId('chat-input');
+		await input.fill('Please respond with a code block containing: ```\nconst x = 5;\n```');
+		await sendButton.click();
+
+		// Wait for response
+		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+		await page.waitForTimeout(500);
+
+		// Check for code block element (non-inline code)
+		const codeBlocks = page.locator('code').filter({
+			has: page.locator('xpath=ancestor::div[contains(@class, "markdown-content")]'),
+		});
+		await expect(codeBlocks.first()).toBeVisible();
+	});
 });

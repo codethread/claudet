@@ -6,6 +6,7 @@ import { useMachine } from '@xstate/react';
 import { chatMachine } from './chatMachine';
 import { ThemeToggle } from './components/ThemeToggle';
 import { MicButton } from './components/MicButton';
+import { MarkdownMessage } from './components/MarkdownMessage';
 import { Menu, Plus } from 'lucide-react';
 import { useSocket } from './hooks/useSocket';
 
@@ -437,7 +438,7 @@ export function APITester() {
 												</div>
 											)}
 										</div>
-										<div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+										<MarkdownMessage content={msg.content} />
 									</div>
 								);
 							})}
