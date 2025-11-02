@@ -6,7 +6,7 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
 	workers: 1, // Single worker to avoid parallel connection issues
-	reporter: 'html',
+	reporter: 'line', // Use line reporter for immediate feedback (html reporter can hang)
 	use: {
 		baseURL: 'https://localhost:3000',
 		trace: 'on-first-retry',
