@@ -1,6 +1,36 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Claude Chat Interface', () => {
+	test('should expose socket to window for WebSocket verification', async ({ page }) => {
+		await page.goto('/');
+
+		// Wait for page to load and socket to be exposed
+		await expect(page.getByRole('heading', { name: 'Good morning, Adam' })).toBeVisible();
+
+		// Verify socket is exposed to window in test mode
+		const socketExists = await page.evaluate(() => {
+			return typeof (window as any).__socket !== 'undefined';
+		});
+
+		expect(socketExists).toBe(true);
+
+		// Verify socket has required properties
+		const socketProps = await page.evaluate(() => {
+			const socket = (window as any).__socket;
+			return {
+				hasConnected: typeof socket.connected === 'boolean',
+				hasId: typeof socket.id === 'string',
+				hasEmit: typeof socket.emit === 'function',
+				hasOn: typeof socket.on === 'function',
+			};
+		});
+
+		expect(socketProps.hasConnected).toBe(true);
+		expect(socketProps.hasId).toBe(true);
+		expect(socketProps.hasEmit).toBe(true);
+		expect(socketProps.hasOn).toBe(true);
+	});
+
 	test('should capture screenshots for mobile (iPhone 6) and desktop viewports', async ({
 		page,
 	}) => {
@@ -156,6 +186,95 @@ test.describe('Claude Chat Interface', () => {
 		// Check that we have at least 2 messages (user + assistant)
 		const messages = page.locator('[class*="rounded-xl"]').filter({ hasText: /You|Claude/ });
 		await expect(messages).toHaveCount(2, { timeout: 2000 });
+	});
+
+	test('should verify WebSocket traffic with requestId correlation', async ({ page }) => {
+		test.setTimeout(60000);
+
+		await page.goto('/');
+
+		// Wait for connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+		await page.waitForTimeout(500);
+
+		// Set up listener for WebSocket messages BEFORE sending
+		const _wsMessages: any[] = [];
+		await page.evaluate(() => {
+			const socket = (window as any).__socket;
+			if (!socket) throw new Error('Socket not exposed to window');
+
+			// Store original emit and on functions
+			const originalEmit = socket.emit.bind(socket);
+			const originalOn = socket.on.bind(socket);
+
+			// Track emitted messages
+			socket.emit = (...args: any[]) => {
+				(window as any).__wsMessages = (window as any).__wsMessages || [];
+				(window as any).__wsMessages.push({ type: 'emit', event: args[0], data: args[1] });
+				return originalEmit(...args);
+			};
+
+			// Track received messages
+			const eventsToTrack = [
+				'chat:response',
+				'chat:error',
+				'session:created',
+				'session:error',
+				'session:list',
+			];
+			eventsToTrack.forEach((eventName) => {
+				originalOn(eventName, (data: any) => {
+					(window as any).__wsMessages = (window as any).__wsMessages || [];
+					(window as any).__wsMessages.push({ type: 'on', event: eventName, data });
+				});
+			});
+		});
+
+		// Send a message
+		const input = page.getByTestId('chat-input');
+		await input.fill('Test message for WebSocket verification');
+		await sendButton.click();
+
+		// Wait for response
+		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+
+		// Retrieve captured WebSocket messages
+		const capturedMessages = await page.evaluate(() => {
+			return (window as any).__wsMessages || [];
+		});
+
+		// Verify we captured messages
+		expect(capturedMessages.length).toBeGreaterThan(0);
+
+		// Find the chat:send emission
+		const chatSendMessage = capturedMessages.find(
+			(m: any) => m.type === 'emit' && m.event === 'chat:send',
+		);
+		expect(chatSendMessage).toBeDefined();
+		expect(chatSendMessage.data).toHaveProperty('message');
+		expect(chatSendMessage.data).toHaveProperty('sessionId');
+		expect(chatSendMessage.data).toHaveProperty('requestId');
+
+		// Verify requestId is a valid UUID
+		const requestId = chatSendMessage.data.requestId;
+		const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+		expect(requestId).toMatch(uuidRegex);
+
+		// Find the chat:response reception
+		const chatResponseMessage = capturedMessages.find(
+			(m: any) => m.type === 'on' && m.event === 'chat:response',
+		);
+		expect(chatResponseMessage).toBeDefined();
+		expect(chatResponseMessage.data).toHaveProperty('type', 'chat:response');
+		expect(chatResponseMessage.data.payload).toHaveProperty('response');
+		expect(chatResponseMessage.data.payload).toHaveProperty('requestId');
+
+		// Verify requestId correlation
+		expect(chatResponseMessage.data.payload.requestId).toBe(requestId);
+
+		console.log('✅ WebSocket traffic verified with requestId correlation');
 	});
 
 	test('should allow typing a long multi-line message that grows the input area', async ({

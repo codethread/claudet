@@ -9,40 +9,53 @@ import { MicButton } from './components/MicButton';
 import { MarkdownMessage } from './components/MarkdownMessage';
 import { Menu, Plus } from 'lucide-react';
 import { useSocket } from './hooks/useSocket';
+import type { Socket } from 'socket.io-client';
 
 export function APITester() {
-	const [state, send] = useMachine(chatMachine, { input: undefined });
+	// Socket.IO connection (handles reconnection automatically)
+	const { socket, connected } = useSocket({ url: '/' });
+
+	const _messageInputRef = useRef<HTMLTextAreaElement>(null);
+	const _chatContainerRef = useRef<HTMLDivElement>(null);
+	const [_leftSidebarOpen, _setLeftSidebarOpen] = useState(false);
+	const [_rightSidebarOpen, _setRightSidebarOpen] = useState(false);
+	const [_isUserScrolled, _setIsUserScrolled] = useState(false);
+
+	// Wait for socket to be available before creating machine
+	// This ensures we don't render the chat UI before socket is ready
+	if (!socket) {
+		return (
+			<div className="h-full w-full flex items-center justify-center">
+				<div className="text-center">
+					<div className="text-lg font-medium">Connecting...</div>
+					<div className="text-sm text-muted-foreground mt-2">
+						Establishing WebSocket connection
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	return <APITesterContent socket={socket} connected={connected} />;
+}
+
+function APITesterContent({ socket, connected }: { socket: Socket; connected: boolean }) {
+	const [state, send] = useMachine(chatMachine, {
+		input: { socket },
+	});
+
 	const messageInputRef = useRef<HTMLTextAreaElement>(null);
 	const chatContainerRef = useRef<HTMLDivElement>(null);
 	const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
 	const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
 	const [isUserScrolled, setIsUserScrolled] = useState(false);
 
-	// Socket.IO connection (handles reconnection automatically)
-	const { socket, connected } = useSocket({ url: '/' });
-
 	// Setup Socket.IO event listeners
 	useEffect(() => {
-		if (!socket) return;
-
 		// Connection established
-		const handleConnect = async () => {
+		const handleConnect = () => {
 			console.log('Socket.IO connected');
-
-			// Load sessions FIRST before transitioning to idle
-			try {
-				const res = await fetch('/api/sessions');
-				const data = await res.json();
-				console.log('Fetched sessions after connect:', data);
-
-				// Now that we have sessions, send both events
-				send({ type: 'SESSIONS_LOADED', sessions: data.sessions });
-				send({ type: 'WEBSOCKET_CONNECTED' });
-			} catch (err) {
-				console.error('Failed to fetch sessions:', err);
-				// Still connect even if session fetch fails
-				send({ type: 'WEBSOCKET_CONNECTED' });
-			}
+			send({ type: 'WEBSOCKET_CONNECTED' });
 		};
 
 		// Connection lost
@@ -82,23 +95,13 @@ export function APITester() {
 		// Check if already connected when effect runs (handle race condition)
 		if (socket.connected) {
 			console.log('Socket already connected when effect registered');
+			send({ type: 'WEBSOCKET_CONNECTED' });
+		}
 
-			// Load sessions FIRST before transitioning to idle
-			(async () => {
-				try {
-					const res = await fetch('/api/sessions');
-					const data = await res.json();
-					console.log('Fetched sessions (already connected):', data);
-
-					// Now that we have sessions, send both events
-					send({ type: 'SESSIONS_LOADED', sessions: data.sessions });
-					send({ type: 'WEBSOCKET_CONNECTED' });
-				} catch (err) {
-					console.error('Failed to fetch sessions:', err);
-					// Still connect even if session fetch fails
-					send({ type: 'WEBSOCKET_CONNECTED' });
-				}
-			})();
+		// Expose socket to window for E2E testing
+		if (navigator.webdriver) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(window as any).__socket = socket;
 		}
 
 		// Clean up on unmount

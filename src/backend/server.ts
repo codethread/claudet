@@ -11,6 +11,8 @@ import { SessionManager } from './SessionManager';
 import type { ClaudeResponse } from './claudeRunner';
 import { Server as Engine } from '@socket.io/bun-engine';
 import { Server } from 'socket.io';
+import { ChatSendSchema, SessionListSchema, SessionCreateSchema } from '../shared/messages';
+import type { ClaudeModel } from './services/ClaudeCodeService';
 
 // Get local network IP address
 function getLocalIP(): string {
@@ -274,21 +276,152 @@ export function startServer(options: StartServerOptions = {}) {
 		// Send connection confirmation with list of sessions
 		socket.emit('connection', {
 			type: 'connection',
-			status: 'connected',
-			sessions: sessions.map((s) => ({
-				id: s.id,
-				model: s.model,
-				createdAt: s.createdAt,
-			})),
-			timestamp: new Date().toISOString(),
+			payload: {
+				status: 'connected',
+				sessions: sessions.map((s) => ({
+					id: s.id,
+					model: s.model,
+					createdAt: s.createdAt,
+				})),
+			},
 		});
 
-		// Handle chat messages (for future use)
-		socket.on('chat:message', async (data, callback) => {
-			console.log('📨 Socket.IO received chat:message:', data);
-			// Echo back for now (can add proper handling later)
-			if (callback) {
-				callback({ status: 'ok' });
+		// Handle chat:send
+		socket.on('chat:send', async (data) => {
+			try {
+				// Validate the incoming message
+				const validated = ChatSendSchema.parse({ type: 'chat:send', payload: data });
+				const { message, sessionId, requestId } = validated.payload;
+
+				console.log(`📨 Socket.IO received chat:send (requestId: ${requestId})`);
+
+				// Send message to Claude
+				const { response, logs } = await sendToClaude(sessionId, message);
+
+				// Emit response with requestId correlation
+				socket.emit('chat:response', {
+					type: 'chat:response',
+					payload: {
+						response,
+						logs: logs || [],
+						sessionId,
+						requestId,
+					},
+				});
+			} catch (error) {
+				console.error('Error handling chat:send:', error);
+
+				// Extract requestId if possible
+				const requestId =
+					typeof data === 'object' && data && 'requestId' in data
+						? String(data.requestId)
+						: crypto.randomUUID();
+
+				socket.emit('chat:error', {
+					type: 'chat:error',
+					payload: {
+						message: error instanceof Error ? error.message : 'Unknown error',
+						requestId,
+					},
+				});
+			}
+		});
+
+		// Handle session:list
+		socket.on('session:list', async (data) => {
+			try {
+				// Validate the incoming message
+				const validated = SessionListSchema.parse({ type: 'session:list', payload: data });
+				const { requestId } = validated.payload;
+
+				console.log(`📨 Socket.IO received session:list (requestId: ${requestId})`);
+
+				const sessions = sessionManager.listSessions();
+
+				// Emit response with requestId correlation
+				socket.emit('session:list', {
+					type: 'session:list',
+					payload: {
+						sessions: sessions.map((s) => ({
+							id: s.id,
+							model: s.model,
+							createdAt: s.createdAt,
+						})),
+						requestId,
+					},
+				});
+			} catch (error) {
+				console.error('Error handling session:list:', error);
+
+				// Extract requestId if possible
+				const requestId =
+					typeof data === 'object' && data && 'requestId' in data
+						? String(data.requestId)
+						: crypto.randomUUID();
+
+				socket.emit('session:error', {
+					type: 'session:error',
+					payload: {
+						message: error instanceof Error ? error.message : 'Unknown error',
+						requestId,
+					},
+				});
+			}
+		});
+
+		// Handle session:create
+		socket.on('session:create', async (data) => {
+			try {
+				// Validate the incoming message
+				const validated = SessionCreateSchema.parse({ type: 'session:create', payload: data });
+				const { model, requestId } = validated.payload;
+
+				console.log(`📨 Socket.IO received session:create (requestId: ${requestId})`);
+
+				// Validate model is a valid ClaudeModel
+				let validModel: ClaudeModel | undefined;
+				if (model) {
+					if (model !== 'haiku' && model !== 'sonnet') {
+						throw new Error(`Invalid model: ${model}. Must be 'haiku' or 'sonnet'`);
+					}
+					validModel = model as ClaudeModel;
+				}
+
+				const session = sessionManager.createSession(validModel);
+				session.actor.send({ type: 'START_PROCESS' });
+				console.log(`🤖 New Claude session created: ${session.id} (model: ${session.model})`);
+
+				// Start reading output for this new session
+				setTimeout(() => {
+					readSessionOutput(session.id);
+				}, 100);
+
+				// Emit response with requestId correlation
+				socket.emit('session:created', {
+					type: 'session:created',
+					payload: {
+						id: session.id,
+						model: session.model,
+						createdAt: session.createdAt,
+						requestId,
+					},
+				});
+			} catch (error) {
+				console.error('Error handling session:create:', error);
+
+				// Extract requestId if possible
+				const requestId =
+					typeof data === 'object' && data && 'requestId' in data
+						? String(data.requestId)
+						: crypto.randomUUID();
+
+				socket.emit('session:error', {
+					type: 'session:error',
+					payload: {
+						message: error instanceof Error ? error.message : 'Unknown error',
+						requestId,
+					},
+				});
 			}
 		});
 
@@ -347,58 +480,6 @@ export function startServer(options: StartServerOptions = {}) {
 				},
 			},
 
-			'/api/sessions': {
-				async GET(_req) {
-					try {
-						const sessions = sessionManager.listSessions();
-						return Response.json({
-							sessions: sessions.map((s) => ({
-								id: s.id,
-								model: s.model,
-								createdAt: s.createdAt,
-							})),
-						});
-					} catch (error) {
-						console.error('Error in GET /api/sessions:', error);
-						return Response.json(
-							{
-								error: error instanceof Error ? error.message : 'Unknown error',
-							},
-							{ status: 500 },
-						);
-					}
-				},
-				async POST(req) {
-					try {
-						const body = await req.json().catch(() => ({}));
-						const model = body.model; // Optional: "haiku", "sonnet", or "opus"
-
-						const session = sessionManager.createSession(model);
-						session.actor.send({ type: 'START_PROCESS' });
-						console.log(`🤖 New Claude session created: ${session.id} (model: ${session.model})`);
-
-						// Start reading output for this new session
-						setTimeout(() => {
-							readSessionOutput(session.id);
-						}, 100);
-
-						return Response.json({
-							id: session.id,
-							model: session.model,
-							createdAt: session.createdAt,
-						});
-					} catch (error) {
-						console.error('Error in POST /api/sessions:', error);
-						return Response.json(
-							{
-								error: error instanceof Error ? error.message : 'Unknown error',
-							},
-							{ status: 500 },
-						);
-					}
-				},
-			},
-
 			'/api/transcribe': {
 				async POST(req) {
 					let tempAudioPath: string | null = null;
@@ -436,44 +517,6 @@ export function startServer(options: StartServerOptions = {}) {
 						if (tempAudioPath) {
 							await unlink(tempAudioPath).catch(() => {});
 						}
-					}
-				},
-			},
-
-			'/api/chat': {
-				async POST(req) {
-					try {
-						const body = await req.json();
-						const message = body.message;
-						const sessionId = body.sessionId;
-
-						if (!message) {
-							return Response.json({ error: 'Message is required' }, { status: 400 });
-						}
-
-						// If no sessionId provided, use the default session
-						let targetSessionId = sessionId;
-						if (!targetSessionId) {
-							const defaultSession = sessionManager.getOrCreateDefaultSession();
-							targetSessionId = defaultSession.id;
-						}
-
-						const { response, logs } = await sendToClaude(targetSessionId, message);
-
-						return Response.json({
-							response,
-							logs,
-							sessionId: targetSessionId,
-							timestamp: new Date().toISOString(),
-						});
-					} catch (error) {
-						console.error('Error in /api/chat:', error);
-						return Response.json(
-							{
-								error: error instanceof Error ? error.message : 'Unknown error',
-							},
-							{ status: 500 },
-						);
 					}
 				},
 			},

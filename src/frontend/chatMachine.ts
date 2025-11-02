@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { assign, fromPromise, setup } from 'xstate';
+import type { Socket } from 'socket.io-client';
+import type { Session, ServerMessage } from '../shared/messages';
 
 // Zod Schemas for runtime validation
 export const MessageSchema = z.object({
@@ -8,37 +10,15 @@ export const MessageSchema = z.object({
 	logs: z.array(z.string()).optional(),
 });
 
-export const SessionSchema = z.object({
-	id: z.string(),
-	model: z.string(),
-	createdAt: z.string(),
-});
-
-export const WebSocketMessageSchema = z.object({
-	type: z.string(),
-	sessionId: z.string().optional(),
-	data: z.string().optional(),
-	sessions: z.array(SessionSchema).optional(),
-});
-
-export const ChatAPIResponseSchema = z.object({
-	response: z.string(),
-	logs: z.array(z.string()).optional(),
-	sessionId: z.string().optional(),
-});
-
-export const SessionsResponseSchema = z.object({
-	sessions: z.array(SessionSchema),
-});
-
 // TypeScript types inferred from Zod schemas
 export type Message = z.infer<typeof MessageSchema>;
-export type Session = z.infer<typeof SessionSchema>;
-export type ChatAPIResponse = z.infer<typeof ChatAPIResponseSchema>;
-export type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
+
+// Re-export Session type from shared messages
+export type { Session };
 
 // Machine context
 export interface ChatMachineContext {
+	socket: Socket | null;
 	sessions: Session[];
 	currentSessionId: string | null;
 	sessionChatHistories: Map<string, Message[]>;
@@ -57,7 +37,6 @@ export type ChatMachineEvent =
 	| { type: 'WEBSOCKET_ERROR'; error: string }
 	| { type: 'WEBSOCKET_MESSAGE'; data: string }
 	| { type: 'SEND_MESSAGE'; message: string }
-	| { type: 'MESSAGE_SUCCESS'; response: ChatAPIResponse }
 	| { type: 'MESSAGE_ERROR'; error: string }
 	| { type: 'SELECT_MESSAGE'; index: number }
 	| { type: 'DESELECT_MESSAGE' }
@@ -70,67 +49,207 @@ export type ChatMachineEvent =
 
 // Actor input for sending messages
 export interface SendMessageInput {
+	socket: Socket;
 	message: string;
-	sessionId: string | null;
+	sessionId: string;
 }
 
-// Actor for sending messages to the API
-const sendMessageActor = fromPromise<ChatAPIResponse, SendMessageInput>(async ({ input }) => {
-	const res = await fetch('/api/chat', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			message: input.message,
-			sessionId: input.sessionId,
-		}),
+// Actor output for sending messages
+export interface SendMessageOutput {
+	response: string;
+	logs: string[];
+	sessionId: string;
+}
+
+// Actor for sending messages via Socket.IO
+const sendMessageActor = fromPromise<SendMessageOutput, SendMessageInput>(async ({ input }) => {
+	const { socket, message, sessionId } = input;
+	const requestId = crypto.randomUUID();
+
+	console.log('[sendMessage] Emitting chat:send with requestId:', requestId);
+
+	return new Promise<SendMessageOutput>((resolve, reject) => {
+		// Set up response listener
+		const handleResponse = (data: unknown) => {
+			console.log('[sendMessage] Received chat:response:', data);
+			try {
+				const msg = data as ServerMessage;
+				if (msg.type === 'chat:response' && msg.payload.requestId === requestId) {
+					socket.off('chat:response', handleResponse);
+					socket.off('chat:error', handleError);
+					resolve({
+						response: msg.payload.response,
+						logs: msg.payload.logs,
+						sessionId: msg.payload.sessionId,
+					});
+				}
+			} catch (error) {
+				console.error('[sendMessage] Error parsing chat:response:', error);
+			}
+		};
+
+		const handleError = (data: unknown) => {
+			console.log('[sendMessage] Received chat:error:', data);
+			try {
+				const msg = data as ServerMessage;
+				if (msg.type === 'chat:error' && msg.payload.requestId === requestId) {
+					socket.off('chat:response', handleResponse);
+					socket.off('chat:error', handleError);
+					reject(new Error(msg.payload.message));
+				}
+			} catch (error) {
+				console.error('[sendMessage] Error parsing chat:error:', error);
+			}
+		};
+
+		socket.on('chat:response', handleResponse);
+		socket.on('chat:error', handleError);
+
+		// Emit the message
+		socket.emit('chat:send', {
+			message,
+			sessionId,
+			requestId,
+		});
+
+		// Timeout after 60 seconds
+		setTimeout(() => {
+			socket.off('chat:response', handleResponse);
+			socket.off('chat:error', handleError);
+			reject(new Error('Request timeout'));
+		}, 60000);
 	});
-
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-	}
-
-	const data = await res.json();
-	return ChatAPIResponseSchema.parse(data);
 });
 
 // Actor input for creating sessions
 export interface CreateSessionInput {
+	socket: Socket;
 	model?: string;
 }
 
-// Actor for creating new sessions
+// Actor for creating new sessions via Socket.IO
 const createSessionActor = fromPromise<Session, CreateSessionInput>(async ({ input }) => {
-	const res = await fetch('/api/sessions', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ model: input.model }),
+	const { socket, model } = input;
+	const requestId = crypto.randomUUID();
+
+	console.log('[createSession] Emitting session:create with requestId:', requestId);
+
+	return new Promise<Session>((resolve, reject) => {
+		// Set up response listener
+		const handleCreated = (data: unknown) => {
+			console.log('[createSession] Received session:created:', data);
+			try {
+				const msg = data as ServerMessage;
+				if (msg.type === 'session:created' && msg.payload.requestId === requestId) {
+					socket.off('session:created', handleCreated);
+					socket.off('session:error', handleError);
+					resolve({
+						id: msg.payload.id,
+						model: msg.payload.model,
+						createdAt: msg.payload.createdAt,
+					});
+				}
+			} catch (error) {
+				console.error('[createSession] Error parsing session:created:', error);
+			}
+		};
+
+		const handleError = (data: unknown) => {
+			console.log('[createSession] Received session:error:', data);
+			try {
+				const msg = data as ServerMessage;
+				if (msg.type === 'session:error' && msg.payload.requestId === requestId) {
+					socket.off('session:created', handleCreated);
+					socket.off('session:error', handleError);
+					reject(new Error(msg.payload.message));
+				}
+			} catch (error) {
+				console.error('[createSession] Error parsing session:error:', error);
+			}
+		};
+
+		socket.on('session:created', handleCreated);
+		socket.on('session:error', handleError);
+
+		// Emit the request
+		socket.emit('session:create', {
+			model,
+			requestId,
+		});
+
+		// Timeout after 30 seconds
+		setTimeout(() => {
+			socket.off('session:created', handleCreated);
+			socket.off('session:error', handleError);
+			reject(new Error('Request timeout'));
+		}, 30000);
 	});
-
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-	}
-
-	const data = await res.json();
-	return SessionSchema.parse(data);
 });
 
-// Actor for loading sessions
-const loadSessionsActor = fromPromise<Session[], void>(async () => {
-	const res = await fetch('/api/sessions');
+// Actor input for loading sessions
+export interface LoadSessionsInput {
+	socket: Socket;
+}
 
-	if (!res.ok) {
-		throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-	}
+// Actor for loading sessions via Socket.IO
+const loadSessionsActor = fromPromise<Session[], LoadSessionsInput>(async ({ input }) => {
+	const { socket } = input;
+	const requestId = crypto.randomUUID();
 
-	const data = await res.json();
-	return SessionsResponseSchema.parse(data).sessions;
+	console.log('[loadSessions] Emitting session:list with requestId:', requestId);
+
+	return new Promise<Session[]>((resolve, reject) => {
+		// Set up response listener
+		const handleList = (data: unknown) => {
+			console.log('[loadSessions] Received session:list:', data);
+			try {
+				const msg = data as ServerMessage;
+				if (msg.type === 'session:list' && msg.payload.requestId === requestId) {
+					socket.off('session:list', handleList);
+					socket.off('session:error', handleError);
+					resolve(msg.payload.sessions);
+				}
+			} catch (error) {
+				console.error('[loadSessions] Error parsing session:list:', error);
+			}
+		};
+
+		const handleError = (data: unknown) => {
+			console.log('[loadSessions] Received session:error:', data);
+			try {
+				const msg = data as ServerMessage;
+				if (msg.type === 'session:error' && msg.payload.requestId === requestId) {
+					socket.off('session:list', handleList);
+					socket.off('session:error', handleError);
+					reject(new Error(msg.payload.message));
+				}
+			} catch (error) {
+				console.error('[loadSessions] Error parsing session:error:', error);
+			}
+		};
+
+		socket.on('session:list', handleList);
+		socket.on('session:error', handleError);
+
+		// Emit the request
+		socket.emit('session:list', {
+			requestId,
+		});
+
+		// Timeout after 30 seconds
+		setTimeout(() => {
+			socket.off('session:list', handleList);
+			socket.off('session:error', handleError);
+			reject(new Error('Request timeout'));
+		}, 30000);
+	});
 });
 
 export const chatMachine = setup({
 	types: {
 		context: {} as ChatMachineContext,
 		events: {} as ChatMachineEvent,
-		input: {} as Partial<ChatMachineContext> | undefined,
+		input: {} as { socket: Socket },
 	},
 	actors: {
 		sendMessage: sendMessageActor,
@@ -141,6 +260,7 @@ export const chatMachine = setup({
 	id: 'chat',
 	initial: 'disconnected',
 	context: ({ input }) => ({
+		socket: input.socket,
 		sessions: [],
 		currentSessionId: null,
 		sessionChatHistories: new Map(),
@@ -149,7 +269,6 @@ export const chatMachine = setup({
 		selectedModel: 'haiku',
 		error: null,
 		reconnectAttempts: 0,
-		...input,
 	}),
 	states: {
 		disconnected: {
@@ -171,12 +290,11 @@ export const chatMachine = setup({
 					actions: assign({
 						sessions: ({ context, event }) => {
 							try {
-								const parsed = JSON.parse(event.data);
-								const validated = WebSocketMessageSchema.parse(parsed);
+								const msg = JSON.parse(event.data) as ServerMessage;
 
 								// If connection message includes sessions, update sessions
-								if (validated.type === 'connection' && validated.sessions) {
-									return validated.sessions;
+								if (msg.type === 'connection' && msg.payload.sessions) {
+									return msg.payload.sessions;
 								}
 							} catch (e) {
 								console.error('Failed to parse WebSocket message:', e);
@@ -185,14 +303,13 @@ export const chatMachine = setup({
 						},
 						currentSessionId: ({ context, event }) => {
 							try {
-								const parsed = JSON.parse(event.data);
-								const validated = WebSocketMessageSchema.parse(parsed);
+								const msg = JSON.parse(event.data) as ServerMessage;
 
 								// If connection message includes sessions, set current session
-								if (validated.type === 'connection' && validated.sessions) {
+								if (msg.type === 'connection' && msg.payload.sessions) {
 									// Set current session to first available if not set
-									if (!context.currentSessionId && validated.sessions.length > 0) {
-										const firstSession = validated.sessions[0];
+									if (!context.currentSessionId && msg.payload.sessions.length > 0) {
+										const firstSession = msg.payload.sessions[0];
 										if (firstSession) {
 											return firstSession.id;
 										}
@@ -308,16 +425,15 @@ export const chatMachine = setup({
 					actions: assign({
 						sessions: ({ context, event }) => {
 							try {
-								const parsed = JSON.parse(event.data);
-								const validated = WebSocketMessageSchema.parse(parsed);
+								const msg = JSON.parse(event.data) as ServerMessage;
 
 								// If connection message includes sessions, update sessions
-								if (validated.type === 'connection' && validated.sessions) {
+								if (msg.type === 'connection' && msg.payload.sessions) {
 									console.log(
 										'[chatMachine] WEBSOCKET_MESSAGE - connection with sessions:',
-										validated.sessions,
+										msg.payload.sessions,
 									);
-									return validated.sessions;
+									return msg.payload.sessions;
 								}
 							} catch (_e) {
 								// Ignore parse errors (could be log messages)
@@ -326,14 +442,13 @@ export const chatMachine = setup({
 						},
 						currentSessionId: ({ context, event }) => {
 							try {
-								const parsed = JSON.parse(event.data);
-								const validated = WebSocketMessageSchema.parse(parsed);
+								const msg = JSON.parse(event.data) as ServerMessage;
 
 								// If connection message includes sessions, set current session
-								if (validated.type === 'connection' && validated.sessions) {
+								if (msg.type === 'connection' && msg.payload.sessions) {
 									// Set current session to first available if not set
-									if (!context.currentSessionId && validated.sessions.length > 0) {
-										const firstSession = validated.sessions[0];
+									if (!context.currentSessionId && msg.payload.sessions.length > 0) {
+										const firstSession = msg.payload.sessions[0];
 										if (firstSession) {
 											console.log(
 												'[chatMachine] WEBSOCKET_MESSAGE - Setting currentSessionId to:',
@@ -392,7 +507,15 @@ export const chatMachine = setup({
 			invoke: {
 				id: 'createSession',
 				src: 'createSession',
-				input: ({ context }) => ({ model: context.selectedModel }),
+				input: ({ context }) => {
+					if (!context.socket) {
+						throw new Error('Socket not available');
+					}
+					return {
+						socket: context.socket,
+						model: context.selectedModel,
+					};
+				},
 				onDone: {
 					target: 'idle',
 					actions: [
@@ -418,7 +541,14 @@ export const chatMachine = setup({
 					if (event.type !== 'SEND_MESSAGE') {
 						throw new Error('Invalid event type');
 					}
+					if (!context.socket) {
+						throw new Error('Socket not available');
+					}
+					if (!context.currentSessionId) {
+						throw new Error('No current session');
+					}
 					return {
+						socket: context.socket,
 						message: event.message,
 						sessionId: context.currentSessionId,
 					};
@@ -489,16 +619,15 @@ export const chatMachine = setup({
 					actions: assign({
 						currentLogs: ({ context, event }) => {
 							try {
-								const parsed = JSON.parse(event.data);
-								const validated = WebSocketMessageSchema.parse(parsed);
+								const msg = JSON.parse(event.data) as ServerMessage;
 
 								// Only add logs for the current session
 								if (
-									validated.type === 'log' &&
-									validated.sessionId === context.currentSessionId &&
-									validated.data
+									msg.type === 'log' &&
+									msg.payload.sessionId === context.currentSessionId &&
+									msg.payload.data
 								) {
-									return [...context.currentLogs, validated.data];
+									return [...context.currentLogs, msg.payload.data];
 								}
 								return context.currentLogs;
 							} catch {
