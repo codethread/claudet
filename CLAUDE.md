@@ -17,9 +17,19 @@ Without reading the architecture docs, you will lack critical context about the 
 ## Processes
 
 - ALWAYS update CLAUDE.md and [docs/architecture.md](./docs/architecture.md) with up-to-date information after architectural changes
-- ALWAYS verify final changes with `bun run validate`, which is an alias for `bun run type-check && bun run test && bun run test:e2e && bun run build`
-- ALWAYS verify final changes at appropriate points with `curl` or playwright MCP as appropriate
+- ALWAYS verify final changes with `bun run validate`, which is an alias for the various linting/testing scripts (see [package.json](./package.json) for further details)
+
+## Main agent
+
 - ALWAYS spawn several researcher agents to outline any best practices, or helpful libraries when starting new features without existing patterns in the codebase
+- ALWAYS make liberal use of your subagents to maximise token effeciency.
+- Follow the general flow of explore -> plan -> build -> validate -> review -> test:
+  - **explore**: Use Explore agent to understand codebase structure, locate relevant files, and identify existing patterns
+  - **plan**: Create structured todo list and outline implementation approach before writing code
+  - **build**: Use tdd-developer agent to implement features with test-driven development methodology
+  - **validate**: Use verification-runner agent to check all CI passes locally (type-check, tests, build); bounce back to tdd-developer if anything fails
+  - **review**: Use codebase-health-reviewer agent to check code quality and adherence to project standards
+  - **test**: Use qa-spec-tester agent to verify implementation meets specification requirements
 
 ## Documentation
 
