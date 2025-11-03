@@ -1,69 +1,69 @@
 @import "./styles/globals.css";
 
 @layer base {
-  :root {
-    @apply font-sans;
-  }
+	:root {
+		@apply font-sans;
+	}
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+	from {
+		transform: rotate(0);
+	}
+	to {
+		transform: rotate(360deg);
+	}
 }
 
 @media (prefers-reduced-motion) {
-  *,
-  ::before,
-  ::after {
-    animation: none !important;
-  }
+	*,
+	::before,
+	::after {
+		animation: none !important;
+	}
 }
 
 @layer utilities {
-  /* Dynamic viewport height with fallback for older browsers */
-  .h-screen-safe {
-    height: 100vh;
-  }
+	/* Dynamic viewport height with fallback for older browsers */
+	.h-screen-safe {
+		height: 100vh;
+	}
 
-  @supports (height: 100dvh) {
-    .h-screen-safe {
-      height: 100dvh;
-    }
-  }
+	@supports (height: 100dvh) {
+		.h-screen-safe {
+			height: 100dvh;
+		}
+	}
 
-  /* Safe area padding utilities */
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
+	/* Safe area padding utilities */
+	.pb-safe {
+		padding-bottom: env(safe-area-inset-bottom, 0);
+	}
 
-  .pt-safe {
-    padding-top: env(safe-area-inset-top, 0);
-  }
+	.pt-safe {
+		padding-top: env(safe-area-inset-top, 0);
+	}
 
-  .pl-safe {
-    padding-left: env(safe-area-inset-left, 0);
-  }
+	.pl-safe {
+		padding-left: env(safe-area-inset-left, 0);
+	}
 
-  .pr-safe {
-    padding-right: env(safe-area-inset-right, 0);
-  }
+	.pr-safe {
+		padding-right: env(safe-area-inset-right, 0);
+	}
 
-  .px-safe {
-    padding-left: env(safe-area-inset-left, 0);
-    padding-right: env(safe-area-inset-right, 0);
-  }
+	.px-safe {
+		padding-left: env(safe-area-inset-left, 0);
+		padding-right: env(safe-area-inset-right, 0);
+	}
 
-  .py-safe {
-    padding-top: env(safe-area-inset-top, 0);
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
+	.py-safe {
+		padding-top: env(safe-area-inset-top, 0);
+		padding-bottom: env(safe-area-inset-bottom, 0);
+	}
 
-  .p-safe {
-    padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
-      env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
-  }
+	.p-safe {
+		padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+			env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+	}
 }

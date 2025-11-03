@@ -14,8 +14,7 @@
 			"!**/certs",
 			"!**/src/frontend/assets/gen",
 			"!**/playwright-report",
-			"!**/test-results",
-			"!**/*.css"
+			"!**/test-results"
 		]
 	},
 	"formatter": {
@@ -48,6 +47,13 @@
 			"jsxQuoteStyle": "double",
 			"semicolons": "always",
 			"trailingCommas": "all"
+		}
+	},
+	"css": {
+		"parser": {
+			"cssModules": false,
+			"allowWrongLineComments": true,
+			"tailwindDirectives": true
 		}
 	}
 }
