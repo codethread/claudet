@@ -4,4 +4,4 @@ env = "BUN_PUBLIC_*"
 
 [test]
 # Exclude Playwright E2E tests from bun test (run with playwright test instead)
-exclude = ["tests/**/*.spec.ts"]
+exclude = ["./tests/**/*"]

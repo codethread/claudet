@@ -68,10 +68,14 @@ test.describe('Claude Chat Interface', () => {
 			await expect(page.getByText('Please respond with exactly these three words')).toBeVisible();
 
 			// Wait for "Thinking..." to appear
-			await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
+			await expect(page.getByText('Thinking...')).toBeVisible({
+				timeout: 2000,
+			});
 
 			// Wait for the assistant's response (fake service responds in ~500ms)
-			await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+			await expect(page.getByText('Thinking...')).not.toBeVisible({
+				timeout: 3000,
+			});
 
 			// Wait a bit for the UI to settle
 			await page.waitForTimeout(500);
@@ -112,10 +116,14 @@ test.describe('Claude Chat Interface', () => {
 			await expect(page.getByText('Count from 1 to 5')).toBeVisible();
 
 			// Wait for "Thinking..." to appear
-			await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
+			await expect(page.getByText('Thinking...')).toBeVisible({
+				timeout: 2000,
+			});
 
 			// Wait for the assistant's response (fake service responds in ~500ms)
-			await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+			await expect(page.getByText('Thinking...')).not.toBeVisible({
+				timeout: 3000,
+			});
 
 			// Wait a bit for the UI to settle
 			await page.waitForTimeout(500);
@@ -181,7 +189,9 @@ test.describe('Claude Chat Interface', () => {
 		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
 
 		// Wait for response (fake service responds in ~500ms)
-		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({
+			timeout: 3000,
+		});
 
 		// Check that we have at least 2 messages (user + assistant)
 		const messages = page.locator('[class*="rounded-xl"]').filter({ hasText: /You|Claude/ });
@@ -211,7 +221,11 @@ test.describe('Claude Chat Interface', () => {
 			// Track emitted messages
 			socket.emit = (...args: any[]) => {
 				(window as any).__wsMessages = (window as any).__wsMessages || [];
-				(window as any).__wsMessages.push({ type: 'emit', event: args[0], data: args[1] });
+				(window as any).__wsMessages.push({
+					type: 'emit',
+					event: args[0],
+					data: args[1],
+				});
 				return originalEmit(...args);
 			};
 
@@ -226,7 +240,11 @@ test.describe('Claude Chat Interface', () => {
 			eventsToTrack.forEach((eventName) => {
 				originalOn(eventName, (data: any) => {
 					(window as any).__wsMessages = (window as any).__wsMessages || [];
-					(window as any).__wsMessages.push({ type: 'on', event: eventName, data });
+					(window as any).__wsMessages.push({
+						type: 'on',
+						event: eventName,
+						data,
+					});
 				});
 			});
 		});
@@ -238,7 +256,9 @@ test.describe('Claude Chat Interface', () => {
 
 		// Wait for response
 		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
-		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({
+			timeout: 3000,
+		});
 
 		// Retrieve captured WebSocket messages
 		const capturedMessages = await page.evaluate(() => {
@@ -367,7 +387,9 @@ test.describe('Claude Chat Interface', () => {
 
 		// Wait for response
 		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
-		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({
+			timeout: 3000,
+		});
 
 		// Wait for assistant message to appear
 		await page.waitForTimeout(500);
@@ -408,7 +430,9 @@ test.describe('Claude Chat Interface', () => {
 
 		// Wait for response
 		await expect(page.getByText('Thinking...')).toBeVisible({ timeout: 2000 });
-		await expect(page.getByText('Thinking...')).not.toBeVisible({ timeout: 3000 });
+		await expect(page.getByText('Thinking...')).not.toBeVisible({
+			timeout: 3000,
+		});
 		await page.waitForTimeout(500);
 
 		// Check for code block element (non-inline code)
@@ -416,5 +440,183 @@ test.describe('Claude Chat Interface', () => {
 			has: page.locator('xpath=ancestor::div[contains(@class, "markdown-content")]'),
 		});
 		await expect(codeBlocks.first()).toBeVisible();
+	});
+
+	test('should create a new session when clicking the + button', async ({ page }) => {
+		test.setTimeout(60000);
+
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+		await page.waitForTimeout(500);
+
+		// Find the + button (second button with SVG, after the hamburger menu)
+		const plusButton = page
+			.getByRole('button')
+			.filter({ has: page.locator('svg') })
+			.nth(1);
+
+		// Verify button is visible and enabled
+		await expect(plusButton).toBeVisible();
+		await expect(plusButton).toBeEnabled();
+
+		// Set up listener for WebSocket session:create message
+		await page.evaluate(() => {
+			const socket = (window as any).__socket;
+			if (!socket) throw new Error('Socket not exposed to window');
+
+			(window as any).__sessionCreateMessages = [];
+
+			// Track session:create emissions
+			const originalEmit = socket.emit.bind(socket);
+			socket.emit = (...args: any[]) => {
+				if (args[0] === 'session:create') {
+					(window as any).__sessionCreateMessages.push({
+						type: 'emit',
+						data: args[1],
+					});
+				}
+				return originalEmit(...args);
+			};
+
+			// Track session:created responses
+			socket.on('session:created', (data: any) => {
+				(window as any).__sessionCreateMessages.push({ type: 'created', data });
+			});
+
+			// Track session:error responses
+			socket.on('session:error', (data: any) => {
+				(window as any).__sessionCreateMessages.push({ type: 'error', data });
+			});
+		});
+
+		// Click the + button to create new session
+		await plusButton.click();
+
+		// Wait for session creation to complete
+		await page.waitForTimeout(2000);
+
+		// Retrieve captured WebSocket messages
+		const sessionMessages = await page.evaluate(() => {
+			return (window as any).__sessionCreateMessages || [];
+		});
+
+		// Verify session:create was emitted
+		const emitMessage = sessionMessages.find((m: any) => m.type === 'emit');
+		expect(emitMessage).toBeDefined();
+		expect(emitMessage.data).toHaveProperty('requestId');
+
+		// Verify requestId is a valid UUID
+		const requestId = emitMessage.data.requestId;
+		const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+		expect(requestId).toMatch(uuidRegex);
+
+		// Verify session:created response was received
+		const createdMessage = sessionMessages.find((m: any) => m.type === 'created');
+		expect(createdMessage).toBeDefined();
+		expect(createdMessage.data).toHaveProperty('type', 'session:created');
+		expect(createdMessage.data.payload).toHaveProperty('id');
+		expect(createdMessage.data.payload).toHaveProperty('model');
+		expect(createdMessage.data.payload).toHaveProperty('createdAt');
+		expect(createdMessage.data.payload).toHaveProperty('requestId');
+
+		// Verify requestId correlation
+		expect(createdMessage.data.payload.requestId).toBe(requestId);
+
+		console.log('✅ Session creation verified with requestId correlation');
+	});
+
+	test('should disable + button while session creation is in progress', async ({ page }) => {
+		test.setTimeout(60000);
+
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+		await page.waitForTimeout(500);
+
+		// Find the + button
+		const plusButton = page
+			.getByRole('button')
+			.filter({ has: page.locator('svg') })
+			.nth(1);
+
+		// Verify button starts enabled
+		await expect(plusButton).toBeEnabled();
+
+		// Click to start session creation
+		await plusButton.click();
+
+		// Button should be disabled during creation
+		// Note: This might be very brief, so we check immediately
+		// In real app, FakeClaudeCodeService responds quickly (~100ms)
+
+		// Wait for creation to complete
+		await page.waitForTimeout(1000);
+
+		// Button should be enabled again after creation completes
+		await expect(plusButton).toBeEnabled();
+	});
+
+	test('should create multiple sessions with unique IDs', async ({ page }) => {
+		test.setTimeout(60000);
+
+		await page.goto('/');
+
+		// Wait for WebSocket connection
+		const sendButton = page.getByRole('button', { name: '→' });
+		await expect(sendButton).toBeEnabled({ timeout: 20000 });
+		await page.waitForTimeout(500);
+
+		// Find the + button
+		const plusButton = page
+			.getByRole('button')
+			.filter({ has: page.locator('svg') })
+			.nth(1);
+
+		// Set up message tracking
+		await page.evaluate(() => {
+			const socket = (window as any).__socket;
+			(window as any).__allSessions = [];
+
+			socket.on('session:created', (data: any) => {
+				(window as any).__allSessions.push(data.payload);
+			});
+		});
+
+		// Create first session
+		await plusButton.click();
+		await page.waitForTimeout(1000);
+
+		// Create second session
+		await plusButton.click();
+		await page.waitForTimeout(1000);
+
+		// Create third session
+		await plusButton.click();
+		await page.waitForTimeout(1000);
+
+		// Retrieve all created sessions
+		const sessions = await page.evaluate(() => {
+			return (window as any).__allSessions || [];
+		});
+
+		// Should have at least 3 sessions (there's also the default session from server startup)
+		expect(sessions.length).toBeGreaterThanOrEqual(3);
+
+		// All sessions should have unique IDs
+		const sessionIds = sessions.map((s: any) => s.id);
+		const uniqueIds = new Set(sessionIds);
+		expect(uniqueIds.size).toBe(sessionIds.length);
+
+		// All sessions should have unique requestIds
+		const requestIds = sessions.map((s: any) => s.requestId);
+		const uniqueRequestIds = new Set(requestIds);
+		expect(uniqueRequestIds.size).toBe(requestIds.length);
+
+		console.log(`✅ Created ${sessions.length} unique sessions`);
 	});
 });

@@ -2,44 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## IMPORTANT: Read Architecture Documentation First
-
-**ALWAYS read [docs/architecture.md](./docs/architecture.md) before starting any work.** This file contains:
-- Complete project structure and file organization
-- Server and frontend architecture details
-- Dark mode implementation
-- PWA implementation (service worker, offline support, updates)
-- Testing strategies and best practices
-- Technology stack and configuration
-
-Without reading the architecture docs, you will lack critical context about the codebase organization and patterns.
-
 ## Processes
 
-- ALWAYS update CLAUDE.md and [docs/architecture.md](./docs/architecture.md) with up-to-date information after architectural changes
-- ALWAYS verify final changes with `bun run validate`, which is an alias for the various linting/testing scripts (see [package.json](./package.json) for further details)
+- ALWAYS update [docs/architecture.md](./docs/architecture.md) with up-to-date information after architectural changes
 
-## Main agent
+## Using Claude Code Agents
 
-- ALWAYS spawn several researcher agents to outline any best practices, or helpful libraries when starting new features without existing patterns in the codebase
-- ALWAYS make liberal use of your subagents to maximise token effeciency.
-- Follow the general flow of explore -> plan -> build -> validate -> review -> test:
-  - **explore**: Use Explore agent to understand codebase structure, locate relevant files, and identify existing patterns
-  - **plan**: Create structured todo list and outline implementation approach before writing code
-  - **build**: Use tdd-developer agent to implement features with test-driven development methodology
-  - **validate**: Use verification-runner agent to check all CI passes locally (type-check, tests, build); bounce back to tdd-developer if anything fails
-  - **review**: Use codebase-health-reviewer agent to check code quality and adherence to project standards
-  - **test**: Use qa-spec-tester agent to verify implementation meets specification requirements
+When working on features, leverage specialized agents to maximize efficiency:
+
+- **Before coding**: Use researcher agents to identify best practices and helpful libraries for new features without existing codebase patterns
+- **During development**: Make liberal use of subagents to maximize token efficiency
+
+### Recommended Workflow
+
+1. **Explore**: Use Explore agent to understand codebase structure, locate relevant files, and identify existing patterns
+2. **Plan**: Always create a concrete, detailed implementation plan and verify with user before proceeding. The more specific the plan, the better.
+3. **Build**: Use tdd-developer agent to implement features with test-driven development methodology
+4. **Validate**: Use verification-runner agent to verify all CI checks pass (type-check, tests, build)
+   - If checks fail, return to tdd-developer agent to fix issues
+5. **Review**: Use codebase-health-reviewer agent to check code quality and adherence to project standards
+6. **Test against spec**: Use qa-spec-tester agent to verify implementation meets specification requirements (when specs exist)
 
 ## Documentation
 
-- **[docs/architecture.md](./docs/architecture.md)** - Complete architecture, project structure, and technology stack
-- **[docs/bun.md](./docs/bun.md)** - Comprehensive Bun-specific development guidelines and best practices
+- **[docs/architecture.md](./docs/architecture.md)** - Complete architecture, project structure, and technology stack (**ALWAYS read before starting any work.**)
 - **[README.md](./README.md)** - User-facing documentation with getting started guide
 
 ## Runtime & Tooling
 
-This project uses **Bun** as the runtime. See [docs/bun.md](./docs/bun.md) for comprehensive Bun-specific guidelines.
+This project uses **Bun** as the runtime.
 
 Key points:
 
@@ -56,16 +47,21 @@ bun run setup                     # Generate certs + PWA icons
 
 # Development
 bun dev                           # Start dev server (HTTPS port 3000)
+bun run dev:test                  # Start dev server with test backend
 bun start                         # Production server
 bun run build                     # Build for production
+
+# Code Quality
+bun run format                    # Format code with Biome
+bun run format:check              # Check code formatting
+bun run lint                      # Lint code with Biome
+bun run lint:fix                  # Lint and fix issues
+bun run type-check                # TypeScript type checking
 
 # Testing
 bun test                          # Run unit tests
 bun run test:e2e                  # E2E tests (headless)
-bun run test:e2e:ui              # E2E tests (with UI)
-bun run validate                  # Run all checks (type-check, test, test:e2e, build)
 
-# Assets (generated, see src/frontend/assets/gen/)
-bun run generate:icons            # Generate PWA icons
-bun run generate:certs            # Generate HTTPS certificates
+# Final Validation
+bun run validate                  # Run all checks (type-check, format:check, lint, test, test:e2e, build)
 ```
