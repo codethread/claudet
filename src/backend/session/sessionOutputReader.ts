@@ -1,4 +1,5 @@
 import type { SessionManager } from '../SessionManager';
+import { readStreamLines } from '../utils/streamReader';
 
 /**
  * Start reading Claude output for a specific session
@@ -34,29 +35,13 @@ export async function readSessionOutput(
 			return;
 		}
 
-		const reader = context.processHandle.stdout.getReader();
-		const decoder = new TextDecoder();
-		let buffer = '';
-
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			buffer += decoder.decode(value, { stream: true });
-			const lines = buffer.split('\n');
-
-			// Keep the last incomplete line in the buffer
-			buffer = lines.pop() || '';
-
-			for (const line of lines) {
-				if (!line.trim()) continue;
-
-				console.log(`[Session ${sessionId.substring(0, 8)}] ${line.substring(0, 100)}...`);
-
-				// Send the output line to the state machine
-				session.actor.send({ type: 'OUTPUT_LINE', line });
-			}
-		}
+		await readStreamLines(
+			context.processHandle.stdout,
+			(line) => session.actor.send({ type: 'OUTPUT_LINE', line }),
+			{
+				logPrefix: `[Session ${sessionId.substring(0, 8)}]`,
+			},
+		);
 	} catch (error) {
 		console.error(`Error reading output for session ${sessionId}:`, error);
 		const session = sessionManager.getSession(sessionId);

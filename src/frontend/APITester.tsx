@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMachine } from '@xstate/react';
 import { chatMachine } from './chatMachine';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -54,25 +54,25 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 	useEffect(() => {
 		// Connection established
 		const handleConnect = () => {
-			console.log('Socket.IO connected');
+			console.log('[socket] Connected');
 			send({ type: 'WEBSOCKET_CONNECTED' });
 		};
 
 		// Connection lost
 		const handleDisconnect = () => {
-			console.log('Socket.IO disconnected');
+			console.log('[socket] Disconnected');
 			send({ type: 'WEBSOCKET_DISCONNECTED' });
 		};
 
 		// Connection message (includes session list)
 		const handleConnectionMessage = (data: unknown) => {
-			console.log('Connection message received:', data);
+			console.log('[socket] Connection message received:', data);
 			send({ type: 'WEBSOCKET_MESSAGE', data: JSON.stringify(data) });
 		};
 
 		// Log message
 		const handleLog = (data: unknown) => {
-			console.log('Log message received:', data);
+			console.log('[socket] Log message received:', data);
 			send({ type: 'WEBSOCKET_MESSAGE', data: JSON.stringify(data) });
 		};
 
@@ -80,7 +80,7 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 		const handleError = (err: Error) => {
 			// Suppress error logging in test/automation environments
 			if (!navigator.webdriver) {
-				console.error('Socket.IO error:', err);
+				console.error('[socket] Error:', err);
 			}
 			send({ type: 'WEBSOCKET_ERROR', error: err.message });
 		};
@@ -93,8 +93,8 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 		socket.on('connect_error', handleError);
 
 		// Check if already connected when effect runs (handle race condition)
+		// Note: This may run multiple times in dev mode (React Strict Mode)
 		if (socket.connected) {
-			console.log('Socket already connected when effect registered');
 			send({ type: 'WEBSOCKET_CONNECTED' });
 		}
 
@@ -161,16 +161,21 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 	const isSending = state.matches('sending');
 	const isReconnecting = state.matches('reconnecting') || !connected;
 	const isLoading = isSending;
-	const chatHistory = currentSessionId ? sessionChatHistories.get(currentSessionId) || [] : [];
+
+	// Memoize chatHistory to prevent unnecessary re-renders
+	const chatHistory = useMemo(
+		() => (currentSessionId ? sessionChatHistories.get(currentSessionId) || [] : []),
+		[currentSessionId, sessionChatHistories],
+	);
+
 	const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
 	const _currentSession = sessions.find((s) => s.id === currentSessionId);
 
-	// Debug logging
+	// Debug logging - only log when sessionChatHistories actually changes
 	useEffect(() => {
 		console.log('[APITester] === State Debug ===');
 		console.log('[APITester] currentSessionId:', currentSessionId);
 		console.log('[APITester] sessions:', sessions);
-		console.log('[APITester] chatHistory length:', chatHistory.length);
 		console.log('[APITester] sessionChatHistories keys:', Array.from(sessionChatHistories.keys()));
 		console.log('[APITester] sessionChatHistories full contents:');
 		sessionChatHistories.forEach((history, sessionId) => {
@@ -180,7 +185,7 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 			});
 		});
 		console.log('[APITester] ==================');
-	}, [currentSessionId, sessions, chatHistory, sessionChatHistories]);
+	}, [currentSessionId, sessions, sessionChatHistories]);
 
 	// Open right sidebar when message is selected
 	useEffect(() => {
@@ -319,6 +324,34 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 									<span className="text-xs opacity-70">Socket.IO will auto-reconnect</span>
 								)}
 							</div>
+						</div>
+
+						{/* Force Refresh - Development Tool */}
+						<div className="flex flex-col gap-2">
+							<label className="text-sm font-medium">Development</label>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={async () => {
+									// Unregister service worker
+									if ('serviceWorker' in navigator) {
+										const registrations = await navigator.serviceWorker.getRegistrations();
+										for (const registration of registrations) {
+											await registration.unregister();
+										}
+									}
+									// Clear all caches
+									if ('caches' in window) {
+										const cacheNames = await caches.keys();
+										await Promise.all(cacheNames.map((name) => caches.delete(name)));
+									}
+									// Hard reload
+									window.location.reload();
+								}}
+								className="w-full"
+							>
+								Force Refresh (Clear Cache)
+							</Button>
 						</div>
 					</div>
 				</SheetContent>

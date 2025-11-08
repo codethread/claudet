@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { assign, fromPromise, setup } from 'xstate';
+import { assign, fromPromise, setup, type createActor } from 'xstate';
 import type {
 	ClaudeCodeService,
 	ClaudeModel,
@@ -304,6 +304,9 @@ export function createClaudeRunnerMachine(
 
 // Type for the created machine
 export type ClaudeRunnerMachine = ReturnType<typeof createClaudeRunnerMachine>;
+
+// Type for an actor created from the machine
+export type ClaudeRunnerActor = ReturnType<typeof createActor<ClaudeRunnerMachine>>;
 
 // Default machine using RealClaudeCodeService (for backwards compatibility)
 // This is used in production when not explicitly injecting a service

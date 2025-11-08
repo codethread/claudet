@@ -14,6 +14,7 @@ import { test, expect, describe } from 'bun:test';
 import { createActor } from 'xstate';
 import { createClaudeRunnerMachine } from './claudeRunner';
 import { RealClaudeCodeService } from './services/RealClaudeCodeService';
+import { readStreamLines } from './utils/streamReader';
 
 describe('Integration: Real Claude Code CLI', () => {
 	test(
@@ -61,34 +62,12 @@ describe('Integration: Real Claude Code CLI', () => {
 			});
 
 			// Start reading output
-			const readOutput = async () => {
-				const context = actor.getSnapshot().context;
-				if (!context.processHandle) return;
-
-				const reader = context.processHandle.stdout.getReader();
-				const decoder = new TextDecoder();
-				let buffer = '';
-
-				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-
-						buffer += decoder.decode(value, { stream: true });
-						const lines = buffer.split('\n');
-						buffer = lines.pop() || '';
-
-						for (const line of lines) {
-							if (!line.trim()) continue;
-							actor.send({ type: 'OUTPUT_LINE', line });
-						}
-					}
-				} catch (error) {
-					console.error('Error reading output:', error);
-				}
-			};
-
-			readOutput();
+			const context = actor.getSnapshot().context;
+			if (context.processHandle) {
+				readStreamLines(context.processHandle.stdout, (line) =>
+					actor.send({ type: 'OUTPUT_LINE', line }),
+				);
+			}
 
 			// Wait for response
 			const result = await responsePromise;
@@ -160,34 +139,12 @@ describe('Integration: Real Claude Code CLI', () => {
 			});
 
 			// Read output
-			const readOutput = async () => {
-				const context = actor.getSnapshot().context;
-				if (!context.processHandle) return;
-
-				const reader = context.processHandle.stdout.getReader();
-				const decoder = new TextDecoder();
-				let buffer = '';
-
-				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-
-						buffer += decoder.decode(value, { stream: true });
-						const lines = buffer.split('\n');
-						buffer = lines.pop() || '';
-
-						for (const line of lines) {
-							if (!line.trim()) continue;
-							actor.send({ type: 'OUTPUT_LINE', line });
-						}
-					}
-				} catch (error) {
-					console.error('Error reading output:', error);
-				}
-			};
-
-			readOutput();
+			const context = actor.getSnapshot().context;
+			if (context.processHandle) {
+				readStreamLines(context.processHandle.stdout, (line) =>
+					actor.send({ type: 'OUTPUT_LINE', line }),
+				);
+			}
 			await responsePromise;
 
 			// Verify session ID was captured
