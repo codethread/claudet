@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Server as Engine } from '@socket.io/bun-engine';
 import { Server } from 'socket.io';
 import { getLocalIP } from './utils/network';
-import { createSession } from './claude';
+import { createSession, sendMessage } from './claude';
 import { setupSocketHandlers } from './socket/handlers';
 import { transcribeAudioFile } from './audio/transcription';
 
@@ -113,6 +113,47 @@ export function startServer() {
 		},
 	});
 
+	// Mobile HTTP API server (plain HTTP for React Native dev without cert issues)
+	const mobileServer = Bun.serve({
+		hostname: '0.0.0.0',
+		port: 3001,
+		routes: {
+			'/api/chat': {
+				async POST(req) {
+					try {
+						const body = (await req.json()) as { message?: string; sessionId?: string };
+						const { message, sessionId } = body;
+
+						if (!message || typeof message !== 'string') {
+							return Response.json({ error: 'message is required' }, { status: 400 });
+						}
+						if (!sessionId || typeof sessionId !== 'string') {
+							return Response.json({ error: 'sessionId is required' }, { status: 400 });
+						}
+
+						const response = await sendMessage(sessionId, message);
+						return Response.json({ response });
+					} catch (error) {
+						console.error('Error in mobile /api/chat:', error);
+						return Response.json(
+							{ error: error instanceof Error ? error.message : 'Unknown error' },
+							{ status: 500 },
+						);
+					}
+				},
+			},
+			'/api/sessions': {
+				async POST(_req) {
+					const session = createSession('haiku');
+					return Response.json({ id: session.id, model: session.model });
+				},
+			},
+		},
+		fetch(req) {
+			return new Response('Not found', { status: 404 });
+		},
+	});
+
 	const localIP = getLocalIP();
 	const port = server.port;
 
@@ -121,6 +162,7 @@ export function startServer() {
 	console.log('='.repeat(50));
 	console.log(`\n📍 Local:   ${server.url}`);
 	console.log(`📱 Network: https://${localIP}:${port}\n`);
+	console.log(`📡 Mobile HTTP API: http://${localIP}:${mobileServer.port} (no TLS)\n`);
 
 	const networkURL = `https://${localIP}:${port}`;
 	console.log('📱 Scan QR code to open on your phone:\n');
