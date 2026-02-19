@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import type { Session } from './types';
+import type { Message, Session } from './types';
 
 function getServerUrl(): string {
 	const hostUri =
@@ -43,4 +43,9 @@ export async function sendChat(sessionId: string, message: string): Promise<stri
 		body: JSON.stringify({ sessionId, message }),
 	});
 	return data.response;
+}
+
+export async function fetchSessionMessages(sessionId: string): Promise<Message[]> {
+	const data = await apiFetch<{ messages: Message[] }>(`/api/sessions/${sessionId}/messages`);
+	return data.messages;
 }

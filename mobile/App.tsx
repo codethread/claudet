@@ -1,28 +1,33 @@
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-	Animated,
 	StyleSheet,
-	Text,
-	View,
-	TextInput,
-	Pressable,
 	ScrollView,
-	ActivityIndicator,
 	KeyboardAvoidingView,
 	Platform,
 	useColorScheme,
 	type NativeSyntheticEvent,
 	type NativeScrollEvent,
 } from 'react-native';
-import { SERVER_URL, fetchSessions, fetchModels, createSession, sendChat } from './api';
-import { ChatMessage } from './components/ChatMessage';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SERVER_URL, fetchSessions, fetchModels, createSession, sendChat, fetchSessionMessages } from './api';
+import { ChatArea } from './components/ChatArea';
+import { Header } from './components/Header';
+import { InputBar } from './components/InputBar';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import type { Message, Session } from './types';
 
 export default function App() {
-	const colorScheme = useColorScheme();
-	const isDark = colorScheme === 'dark';
+	return (
+		<SafeAreaProvider>
+			<AppContent />
+		</SafeAreaProvider>
+	);
+}
+
+function AppContent() {
+	const isDark = useColorScheme() === 'dark';
+	const insets = useSafeAreaInsets();
 
 	const [sessions, setSessions] = useState<Session[]>([]);
 	const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -34,29 +39,11 @@ export default function App() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [connected, setConnected] = useState(false);
 	const [showScrollButton, setShowScrollButton] = useState(false);
+	const [loadingMessages, setLoadingMessages] = useState(false);
 
 	const scrollRef = useRef<ScrollView>(null);
+	const fetchedSessionsRef = useRef<Set<string>>(new Set());
 	const isNearBottomRef = useRef(true);
-	const bounceAnim = useRef(new Animated.Value(0)).current;
-
-	useEffect(() => {
-		if (!showScrollButton) return;
-		bounceAnim.setValue(0);
-		Animated.sequence([
-			Animated.timing(bounceAnim, { toValue: 7, duration: 140, useNativeDriver: true }),
-			Animated.timing(bounceAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
-			Animated.timing(bounceAnim, { toValue: 4, duration: 110, useNativeDriver: true }),
-			Animated.timing(bounceAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
-		]).start();
-	}, [showScrollButton, bounceAnim]);
-
-	const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-		const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-		const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-		const near = distanceFromBottom < 80;
-		isNearBottomRef.current = near;
-		if (near) setShowScrollButton(false);
-	};
 
 	const currentMessages: Message[] = currentSessionId
 		? (messagesBySession.get(currentSessionId) ?? [])
@@ -98,7 +85,6 @@ export default function App() {
 					setSessions(existingSessions);
 					setCurrentSessionId(existingSessions[0]?.id ?? null);
 				} else {
-					// Auto-create first session
 					const session = await createSession(modelsData.default);
 					if (!cancelled) {
 						setSessions([session]);
@@ -121,13 +107,45 @@ export default function App() {
 		};
 	}, []);
 
+	// Fetch message history from server when switching to a session we haven't loaded yet
+	useEffect(() => {
+		if (!currentSessionId) return;
+		if (fetchedSessionsRef.current.has(currentSessionId)) return;
+
+		fetchedSessionsRef.current.add(currentSessionId);
+		setLoadingMessages(true);
+
+		fetchSessionMessages(currentSessionId)
+			.then((messages) => {
+				if (messages.length > 0) {
+					setMessagesBySession((prev) => {
+						const next = new Map(prev);
+						next.set(currentSessionId, messages);
+						return next;
+					});
+				}
+			})
+			.catch(() => {
+				// Silently ignore — server may not have history yet
+			})
+			.finally(() => setLoadingMessages(false));
+	}, [currentSessionId]);
+
+	const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+		const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+		const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+		const near = distanceFromBottom < 80;
+		isNearBottomRef.current = near;
+		if (near) setShowScrollButton(false);
+	};
+
 	const send = async () => {
 		if (!input.trim() || !currentSessionId || loading) return;
 
 		const userMessage = input.trim();
 		setInput('');
 		appendMessage(currentSessionId, { role: 'user', content: userMessage });
-		isNearBottomRef.current = true; // user just sent, always scroll
+		isNearBottomRef.current = true;
 		setLoading(true);
 		setError(null);
 
@@ -146,103 +164,47 @@ export default function App() {
 		}
 	};
 
-	const bg = isDark ? '#000' : '#f5f5f5';
-	const headerBg = isDark ? '#1c1c1e' : '#fff';
-	const headerBorder = isDark ? '#3a3a3c' : '#e0e0e0';
-	const headerText = isDark ? '#fff' : '#000';
-	const inputBg = isDark ? '#2c2c2e' : '#f0f0f0';
-	const inputText = isDark ? '#fff' : '#000';
-	const inputBorder = isDark ? '#3a3a3c' : '#e0e0e0';
-
 	const hour = new Date().getHours();
 	const greeting =
 		hour < 12 ? 'Good morning, Adam' : hour < 18 ? 'Good afternoon, Adam' : 'Good evening, Adam';
 
 	return (
 		<KeyboardAvoidingView
-			style={[styles.container, { backgroundColor: bg }]}
+			style={[styles.container, { backgroundColor: isDark ? '#000' : '#f5f5f5' }]}
 			behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
 		>
 			<StatusBar style={isDark ? 'light' : 'dark'} />
 
-			{/* Header */}
-			<View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: headerBorder }]}>
-				<Pressable style={styles.headerButton} onPress={() => setSettingsOpen(true)} hitSlop={8}>
-					<Text style={[styles.headerIcon, { color: headerText }]}>☰</Text>
-				</Pressable>
-				<Text style={[styles.headerTitle, { color: headerText }]} numberOfLines={1}>
-					{greeting}
-				</Text>
-				<Pressable style={styles.headerButton} onPress={handleNewSession} hitSlop={8}>
-					<Text style={[styles.headerIcon, { color: headerText }]}>＋</Text>
-				</Pressable>
-			</View>
+			<Header
+				greeting={greeting}
+				onOpenSettings={() => setSettingsOpen(true)}
+				onNewSession={handleNewSession}
+			/>
 
-			{/* Chat area */}
-			<ScrollView
-				ref={scrollRef}
-				style={styles.messages}
-				contentContainerStyle={styles.messagesContent}
-				keyboardShouldPersistTaps="handled"
+			<ChatArea
+				messages={currentMessages}
+				loading={loading}
+				loadingMessages={loadingMessages}
+				error={error}
+				scrollRef={scrollRef}
+				showScrollButton={showScrollButton}
+				onScrollToBottom={() => {
+					scrollRef.current?.scrollToEnd({ animated: true });
+					setShowScrollButton(false);
+				}}
 				onScroll={handleScroll}
-				scrollEventThrottle={100}
-			>
-				{currentMessages.length === 0 && !error && (
-					<Text style={styles.emptyText}>Send a message to start chatting</Text>
-				)}
-				{currentMessages.map((msg, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: messages are append-only, index is stable
-					<ChatMessage key={i} message={msg} />
-				))}
-				{loading && (
-					<View style={styles.loadingRow}>
-						<ActivityIndicator size="small" color="#666" />
-						<Text style={styles.loadingText}>Thinking...</Text>
-					</View>
-				)}
-				{error && <Text style={styles.errorText}>{error}</Text>}
-			</ScrollView>
+				bottomOffset={76 + insets.bottom}
+			/>
 
-			{showScrollButton && (
-				<Animated.View
-					style={[styles.scrollButtonWrap, { transform: [{ translateY: bounceAnim }] }]}
-				>
-					<Pressable
-						style={styles.scrollButton}
-						onPress={() => {
-							scrollRef.current?.scrollToEnd({ animated: true });
-							setShowScrollButton(false);
-						}}
-					>
-						<Text style={styles.scrollButtonText}>↓</Text>
-					</Pressable>
-				</Animated.View>
-			)}
+			<InputBar
+				input={input}
+				onChangeInput={setInput}
+				onSend={send}
+				editable={!!currentSessionId && !loading}
+				canSend={!!currentSessionId && !loading && !!input.trim()}
+				bottomInset={insets.bottom}
+			/>
 
-			{/* Input row */}
-			<View style={[styles.inputRow, { backgroundColor: headerBg, borderTopColor: inputBorder }]}>
-				<TextInput
-					style={[styles.input, { backgroundColor: inputBg, color: inputText }]}
-					value={input}
-					onChangeText={setInput}
-					placeholder="Type a message..."
-					placeholderTextColor={isDark ? '#636366' : '#999'}
-					multiline
-					editable={!!currentSessionId && !loading}
-				/>
-				<Pressable
-					style={[
-						styles.sendButton,
-						(!currentSessionId || loading || !input.trim()) && styles.sendButtonDisabled,
-					]}
-					onPress={send}
-					disabled={!currentSessionId || loading || !input.trim()}
-				>
-					<Text style={styles.sendButtonText}>→</Text>
-				</Pressable>
-			</View>
-
-			{/* Settings drawer */}
 			<SettingsDrawer
 				visible={settingsOpen}
 				onClose={() => setSettingsOpen(false)}
@@ -261,116 +223,5 @@ export default function App() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-	},
-	header: {
-		paddingTop: 56,
-		paddingBottom: 12,
-		paddingHorizontal: 16,
-		borderBottomWidth: 1,
-		flexDirection: 'row',
-		alignItems: 'center',
-		justifyContent: 'space-between',
-	},
-	headerButton: {
-		padding: 4,
-		minWidth: 36,
-		alignItems: 'center',
-	},
-	headerIcon: {
-		fontSize: 22,
-		fontWeight: '500',
-	},
-	headerTitle: {
-		fontSize: 17,
-		fontWeight: '600',
-		flex: 1,
-		textAlign: 'center',
-	},
-	messages: {
-		flex: 1,
-	},
-	messagesContent: {
-		padding: 16,
-		gap: 4,
-	},
-	emptyText: {
-		textAlign: 'center',
-		color: '#999',
-		marginTop: 40,
-		fontSize: 15,
-	},
-	loadingRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 8,
-		paddingVertical: 4,
-		alignSelf: 'flex-start',
-	},
-	loadingText: {
-		color: '#666',
-		fontSize: 14,
-	},
-	errorText: {
-		color: '#cc0000',
-		fontSize: 13,
-		paddingVertical: 4,
-	},
-	inputRow: {
-		flexDirection: 'row',
-		alignItems: 'flex-end',
-		padding: 12,
-		gap: 8,
-		borderTopWidth: 1,
-	},
-	input: {
-		flex: 1,
-		minHeight: 40,
-		maxHeight: 120,
-		borderRadius: 20,
-		paddingHorizontal: 16,
-		paddingVertical: 10,
-		fontSize: 15,
-	},
-	sendButton: {
-		width: 40,
-		height: 40,
-		borderRadius: 20,
-		backgroundColor: '#007AFF',
-		justifyContent: 'center',
-		alignItems: 'center',
-	},
-	sendButtonDisabled: {
-		backgroundColor: '#ccc',
-	},
-	sendButtonText: {
-		color: '#fff',
-		fontSize: 18,
-		fontWeight: '700',
-	},
-	scrollButtonWrap: {
-		position: 'absolute',
-		bottom: 76,
-		left: 0,
-		right: 0,
-		alignItems: 'center',
-	},
-	scrollButton: {
-		width: 40,
-		height: 40,
-		borderRadius: 20,
-		backgroundColor: '#007AFF',
-		justifyContent: 'center',
-		alignItems: 'center',
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 2 },
-		shadowOpacity: 0.25,
-		shadowRadius: 4,
-		elevation: 5,
-	},
-	scrollButtonText: {
-		color: '#fff',
-		fontSize: 20,
-		fontWeight: '700',
-		lineHeight: 24,
 	},
 });

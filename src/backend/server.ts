@@ -1,5 +1,5 @@
 import { getLocalIP } from './utils/network';
-import { createSession, listSessions, sendMessage } from './claude';
+import { createSession, getSession, listSessions, sendMessage } from './claude';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
@@ -86,6 +86,16 @@ export function startServer() {
 			if (req.method === 'OPTIONS') {
 				return new Response(null, { status: 204, headers: CORS_HEADERS });
 			}
+
+			// GET /api/sessions/:id/messages
+			const url = new URL(req.url);
+			const match = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+			if (match?.[1] && req.method === 'GET') {
+				const session = getSession(match[1]);
+				if (!session) return corsJson({ error: 'Session not found' }, 404);
+				return corsJson({ messages: session.messages });
+			}
+
 			return new Response('Not found', { status: 404, headers: CORS_HEADERS });
 		},
 	});

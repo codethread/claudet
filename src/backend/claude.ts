@@ -2,18 +2,24 @@ import { randomUUID } from 'node:crypto';
 
 export type ClaudeModel = 'haiku' | 'sonnet';
 
+export interface SessionMessage {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
 export interface Session {
 	id: string;
 	model: ClaudeModel;
 	createdAt: Date;
 	messageCount: number;
+	messages: SessionMessage[];
 }
 
 const sessions = new Map<string, Session>();
 
 export function createSession(model: ClaudeModel = 'haiku'): Session {
 	const id = randomUUID();
-	const session: Session = { id, model, createdAt: new Date(), messageCount: 0 };
+	const session: Session = { id, model, createdAt: new Date(), messageCount: 0, messages: [] };
 	sessions.set(id, session);
 	return session;
 }
@@ -34,7 +40,10 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 	if (process.env.CLAUDE_TEST_FAKE === 'true') {
 		await new Promise((r) => setTimeout(r, 300));
 		session.messageCount++;
-		return `Echo: ${message.substring(0, 100)}`;
+		const echoResponse = `Echo: ${message.substring(0, 100)}`;
+		session.messages.push({ role: 'user', content: message });
+		session.messages.push({ role: 'assistant', content: echoResponse });
+		return echoResponse;
 	}
 
 	const isFirstMessage = session.messageCount === 0;
@@ -43,6 +52,7 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 		: ['--resume', sessionId, '--print', message];
 
 	session.messageCount++;
+	session.messages.push({ role: 'user', content: message });
 
 	const claudeDir = process.env.CLAUDE_DIR;
 
@@ -63,8 +73,12 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 	const exitCode = await proc.exited;
 
 	if (exitCode !== 0) {
+		// Roll back the user message we optimistically pushed
+		session.messages.pop();
 		throw new Error(`Claude exited with code ${exitCode}: ${errText.trim()}`);
 	}
 
-	return output.trim();
+	const response = output.trim();
+	session.messages.push({ role: 'assistant', content: response });
+	return response;
 }
