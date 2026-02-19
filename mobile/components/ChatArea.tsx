@@ -7,6 +7,7 @@ import {
 	ScrollView,
 	ActivityIndicator,
 	Pressable,
+	useColorScheme,
 	type NativeSyntheticEvent,
 	type NativeScrollEvent,
 } from 'react-native';
@@ -36,7 +37,11 @@ export function ChatArea({
 	onScroll,
 	bottomOffset,
 }: Props) {
+	const isDark = useColorScheme() === 'dark';
 	const bounceAnim = useRef(new Animated.Value(0)).current;
+
+	const emptyColor = isDark ? '#636366' : '#999';
+	const loadingColor = isDark ? '#8e8e93' : '#666';
 
 	useEffect(() => {
 		if (!showScrollButton) return;
@@ -61,7 +66,7 @@ export function ChatArea({
 				scrollEventThrottle={100}
 			>
 				{messages.length === 0 && !error && (
-					<Text style={styles.empty}>
+					<Text style={[styles.empty, { color: emptyColor }]}>
 						{loadingMessages ? 'Loading messages…' : 'Send a message to start chatting'}
 					</Text>
 				)}
@@ -71,8 +76,8 @@ export function ChatArea({
 				))}
 				{loading && (
 					<View style={styles.loadingRow}>
-						<ActivityIndicator size="small" color="#666" />
-						<Text style={styles.loadingText}>Thinking...</Text>
+						<ActivityIndicator size="small" color={loadingColor} />
+						<Text style={[styles.loadingText, { color: loadingColor }]}>Thinking...</Text>
 					</View>
 				)}
 				{error && <Text style={styles.errorText}>{error}</Text>}
@@ -104,7 +109,6 @@ const styles = StyleSheet.create({
 	},
 	empty: {
 		textAlign: 'center',
-		color: '#999',
 		marginTop: 40,
 		fontSize: 15,
 	},
@@ -116,11 +120,10 @@ const styles = StyleSheet.create({
 		alignSelf: 'flex-start',
 	},
 	loadingText: {
-		color: '#666',
 		fontSize: 14,
 	},
 	errorText: {
-		color: '#cc0000',
+		color: '#ff3b30',
 		fontSize: 13,
 		paddingVertical: 4,
 	},
