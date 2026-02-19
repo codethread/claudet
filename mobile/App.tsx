@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
 	StyleSheet,
-	ScrollView,
+	type ScrollView,
 	KeyboardAvoidingView,
 	Platform,
 	useColorScheme,
@@ -10,12 +10,23 @@ import {
 	type NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SERVER_URL, fetchSessions, fetchModels, createSession, sendChat, fetchSessionMessages } from './api';
+import {
+	SERVER_URL,
+	fetchSessions,
+	fetchModels,
+	fetchSettings,
+	saveSettings as apiSaveSettings,
+	fetchProjects,
+	createSession,
+	sendChat,
+	fetchSessionMessages,
+} from './api';
 import { ChatArea } from './components/ChatArea';
+import { EmptyProjectView } from './components/EmptyProjectView';
 import { Header } from './components/Header';
 import { InputBar } from './components/InputBar';
 import { SettingsDrawer } from './components/SettingsDrawer';
-import type { Message, Session } from './types';
+import type { Message, Project, Session } from './types';
 
 export default function App() {
 	return (
@@ -41,6 +52,11 @@ function AppContent() {
 	const [showScrollButton, setShowScrollButton] = useState(false);
 	const [loadingMessages, setLoadingMessages] = useState(false);
 
+	// Project management state
+	const [baseDir, setBaseDir] = useState<string | null>(null);
+	const [projects, setProjects] = useState<Project[]>([]);
+	const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+
 	const scrollRef = useRef<ScrollView>(null);
 	const fetchedSessionsRef = useRef<Set<string>>(new Set());
 	const isNearBottomRef = useRef(true);
@@ -57,39 +73,57 @@ function AppContent() {
 		});
 	};
 
+	const handleSelectProject = useCallback((id: string) => {
+		setCurrentProjectId(id);
+		setCurrentSessionId(null);
+	}, []);
+
 	const handleNewSession = useCallback(async () => {
+		if (!currentProjectId) return;
 		try {
-			const session = await createSession(selectedModel);
+			const session = await createSession(selectedModel, currentProjectId);
 			setSessions((prev) => [session, ...prev]);
 			setCurrentSessionId(session.id);
 			setError(null);
 		} catch (e) {
 			setError(`Failed to create session: ${e instanceof Error ? e.message : 'Unknown error'}`);
 		}
-	}, [selectedModel]);
+	}, [selectedModel, currentProjectId]);
 
-	// On mount: load models + sessions, auto-create if none
+	const handleSaveBaseDir = useCallback(async (value: string) => {
+		const settings = await apiSaveSettings(value);
+		setBaseDir(settings.baseDir);
+		if (settings.baseDir) {
+			const discovered = await fetchProjects();
+			setProjects(discovered);
+		}
+	}, []);
+
+	// On mount: load models + settings in parallel; if baseDir set, also load projects + sessions
 	useEffect(() => {
 		let cancelled = false;
 
 		async function init() {
 			try {
-				const [modelsData, existingSessions] = await Promise.all([fetchModels(), fetchSessions()]);
+				const [modelsData, settings] = await Promise.all([fetchModels(), fetchSettings()]);
 
 				if (cancelled) return;
 
 				setSelectedModel(modelsData.default);
 				setConnected(true);
+				setBaseDir(settings.baseDir);
 
-				if (existingSessions.length > 0) {
+				if (settings.baseDir) {
+					const [discovered, existingSessions] = await Promise.all([
+						fetchProjects(),
+						fetchSessions(),
+					]);
+
+					if (cancelled) return;
+
+					setProjects(discovered);
 					setSessions(existingSessions);
-					setCurrentSessionId(existingSessions[0]?.id ?? null);
-				} else {
-					const session = await createSession(modelsData.default);
-					if (!cancelled) {
-						setSessions([session]);
-						setCurrentSessionId(session.id);
-					}
+					// Do NOT auto-select project or create session
 				}
 			} catch (e) {
 				if (!cancelled) {
@@ -168,6 +202,11 @@ function AppContent() {
 	const greeting =
 		hour < 12 ? 'Good morning, Adam' : hour < 18 ? 'Good afternoon, Adam' : 'Good evening, Adam';
 
+	// Sessions filtered to current project
+	const projectSessions = currentProjectId
+		? sessions.filter((s) => s.projectPath === currentProjectId)
+		: [];
+
 	return (
 		<KeyboardAvoidingView
 			style={[styles.container, { backgroundColor: isDark ? '#000' : '#f5f5f5' }]}
@@ -181,40 +220,56 @@ function AppContent() {
 				onNewSession={handleNewSession}
 			/>
 
-			<ChatArea
-				messages={currentMessages}
-				loading={loading}
-				loadingMessages={loadingMessages}
-				error={error}
-				scrollRef={scrollRef}
-				showScrollButton={showScrollButton}
-				onScrollToBottom={() => {
-					scrollRef.current?.scrollToEnd({ animated: true });
-					setShowScrollButton(false);
-				}}
-				onScroll={handleScroll}
-				bottomOffset={76 + insets.bottom}
-			/>
+			{currentProjectId ? (
+				<>
+					<ChatArea
+						messages={currentMessages}
+						loading={loading}
+						loadingMessages={loadingMessages}
+						error={error}
+						scrollRef={scrollRef}
+						showScrollButton={showScrollButton}
+						onScrollToBottom={() => {
+							scrollRef.current?.scrollToEnd({ animated: true });
+							setShowScrollButton(false);
+						}}
+						onScroll={handleScroll}
+						bottomOffset={76 + insets.bottom}
+					/>
 
-			<InputBar
-				input={input}
-				onChangeInput={setInput}
-				onSend={send}
-				editable={!!currentSessionId && !loading}
-				canSend={!!currentSessionId && !loading && !!input.trim()}
-				bottomInset={insets.bottom}
-			/>
+					<InputBar
+						input={input}
+						onChangeInput={setInput}
+						onSend={send}
+						editable={!!currentSessionId && !loading}
+						canSend={!!currentSessionId && !loading && !!input.trim()}
+						bottomInset={insets.bottom}
+					/>
+				</>
+			) : (
+				<EmptyProjectView
+					baseDir={baseDir}
+					projects={projects}
+					onOpenSettings={() => setSettingsOpen(true)}
+					onSelectProject={handleSelectProject}
+				/>
+			)}
 
 			<SettingsDrawer
 				visible={settingsOpen}
 				onClose={() => setSettingsOpen(false)}
-				sessions={sessions}
+				sessions={projectSessions}
 				currentSessionId={currentSessionId}
 				selectedModel={selectedModel}
 				connected={connected}
 				onSelectSession={(id) => setCurrentSessionId(id)}
 				onNewSession={handleNewSession}
 				onSelectModel={(model) => setSelectedModel(model)}
+				baseDir={baseDir}
+				projects={projects}
+				currentProjectId={currentProjectId}
+				onSelectProject={handleSelectProject}
+				onSaveBaseDir={handleSaveBaseDir}
 			/>
 		</KeyboardAvoidingView>
 	);

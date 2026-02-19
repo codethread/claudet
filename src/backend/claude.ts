@@ -13,13 +13,21 @@ export interface Session {
 	createdAt: Date;
 	messageCount: number;
 	messages: SessionMessage[];
+	projectPath: string;
 }
 
 const sessions = new Map<string, Session>();
 
-export function createSession(model: ClaudeModel = 'haiku'): Session {
+export function createSession(model: ClaudeModel = 'haiku', projectPath: string): Session {
 	const id = randomUUID();
-	const session: Session = { id, model, createdAt: new Date(), messageCount: 0, messages: [] };
+	const session: Session = {
+		id,
+		model,
+		createdAt: new Date(),
+		messageCount: 0,
+		messages: [],
+		projectPath,
+	};
 	sessions.set(id, session);
 	return session;
 }
@@ -28,8 +36,10 @@ export function getSession(id: string): Session | undefined {
 	return sessions.get(id);
 }
 
-export function listSessions(): Session[] {
-	return Array.from(sessions.values());
+export function listSessions(projectPath?: string): Session[] {
+	const all = Array.from(sessions.values());
+	if (projectPath === undefined) return all;
+	return all.filter((s) => s.projectPath === projectPath);
 }
 
 export async function sendMessage(sessionId: string, message: string): Promise<string> {
@@ -54,7 +64,8 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 	session.messageCount++;
 	session.messages.push({ role: 'user', content: message });
 
-	const claudeDir = process.env.CLAUDE_DIR;
+	// CLAUDE_DIR overrides project path (keeps dev:test script working)
+	const cwd = process.env.CLAUDE_DIR ?? session.projectPath;
 
 	// Strip CLAUDECODE from the environment so nested sessions don't get blocked
 	const { CLAUDECODE: _, ...safeEnv } = process.env;
@@ -63,7 +74,7 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 		stdout: 'pipe',
 		stderr: 'pipe',
 		env: safeEnv,
-		...(claudeDir && { cwd: claudeDir }),
+		cwd,
 	});
 
 	const [output, errText] = await Promise.all([

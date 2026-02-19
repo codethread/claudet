@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import type { Message, Session } from './types';
+import type { Message, Project, Session, Settings } from './types';
 
 function getServerUrl(): string {
 	const hostUri =
@@ -19,8 +19,26 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 	return data;
 }
 
-export async function fetchSessions(): Promise<Session[]> {
-	const data = await apiFetch<{ sessions: Session[] }>('/api/sessions');
+export async function fetchSettings(): Promise<Settings> {
+	return apiFetch<Settings>('/api/settings');
+}
+
+export async function saveSettings(baseDir: string): Promise<Settings> {
+	return apiFetch<Settings>('/api/settings', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ baseDir }),
+	});
+}
+
+export async function fetchProjects(): Promise<Project[]> {
+	const data = await apiFetch<{ projects: Project[] }>('/api/projects');
+	return data.projects;
+}
+
+export async function fetchSessions(projectPath?: string): Promise<Session[]> {
+	const query = projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : '';
+	const data = await apiFetch<{ sessions: Session[] }>(`/api/sessions${query}`);
 	return data.sessions;
 }
 
@@ -28,11 +46,11 @@ export async function fetchModels(): Promise<{ models: string[]; default: string
 	return apiFetch<{ models: string[]; default: string }>('/api/models');
 }
 
-export async function createSession(model: string): Promise<Session> {
+export async function createSession(model: string, projectPath: string): Promise<Session> {
 	return apiFetch<Session>('/api/sessions', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ model }),
+		body: JSON.stringify({ model, projectPath }),
 	});
 }
 

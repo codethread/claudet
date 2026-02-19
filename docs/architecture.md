@@ -26,16 +26,25 @@ A plain HTTP server serves as the API for the React Native mobile client.
 - Each message invokes `claude --print` as a one-shot process (no persistent processes)
 - **First message in a session**: `claude --session-id <uuid> --model <model> --print "<message>"`
 - **Subsequent messages**: `claude --resume <uuid> --print "<message>"`
-- Session metadata (ID, model, createdAt, message count) stored in a simple in-memory Map
+- Session metadata (ID, model, createdAt, projectPath, message count) stored in a simple in-memory Map
+- `cwd` for Claude CLI = `CLAUDE_DIR` env var (override) or `session.projectPath`
 - **Testing**: Set `CLAUDE_TEST_FAKE=true` to skip real Claude CLI calls and return echo responses
+
+### 3. Settings & Projects (`src/backend/settings.ts`, `src/backend/projects.ts`)
+
+- Settings stored at `~/.claudet/config.json` — currently just `{ baseDir: string | null }`
+- `discoverProjects(basePath)` — synchronous fs walk, max 3 levels, skips `node_modules`/`dist`/`.git`/etc., finds git repos (directories containing `.git`), returns sorted by name
 
 ## API Endpoints (HTTP, port 3001)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/models` | GET | Returns `{ models: ['haiku', 'sonnet'], default: 'haiku' }` |
-| `/api/sessions` | GET | Returns `{ sessions: [{ id, model, createdAt }] }` |
-| `/api/sessions` | POST | Create session, body: `{ model? }`, returns `{ id, model, createdAt }` |
+| `/api/settings` | GET | Returns `{ baseDir: string \| null }` |
+| `/api/settings` | POST | Body: `{ baseDir: string }`, validates & saves, returns `{ baseDir }` or 400 |
+| `/api/projects` | GET | Returns `{ projects: [{ id, name, path }] }` (discovers git repos under baseDir) |
+| `/api/sessions` | GET | Returns `{ sessions: [{ id, model, createdAt, projectPath }] }`; optional `?projectPath=` filter |
+| `/api/sessions` | POST | Body: `{ model?, projectPath }` (required), returns `{ id, model, createdAt, projectPath }` |
 | `/api/chat` | POST | Send message, body: `{ message, sessionId }`, returns `{ response }` |
 
 ## Mobile App Architecture
@@ -50,14 +59,15 @@ The React Native Expo app is the primary client. It uses HTTP REST to communicat
 mobile/
 ├── App.tsx                # Main app component (state, layout, chat logic)
 ├── api.ts                 # API client (fetch wrappers for all endpoints)
-├── types.ts               # Shared TypeScript types (Message, Session)
+├── types.ts               # Shared TypeScript types (Message, Session, Project, Settings)
 ├── index.ts               # Expo entry point
 ├── app.json               # Expo config
 ├── package.json           # npm dependencies
 ├── components/
-│   ├── ChatMessage.tsx    # Chat bubble with react-native-markdown-display
-│   └── SettingsDrawer.tsx # Left-side modal drawer (model picker, sessions)
-└── assets/                # Expo default assets
+│   ├── ChatMessage.tsx      # Chat bubble with react-native-markdown-display
+│   ├── EmptyProjectView.tsx # Shown when no project is selected
+│   └── SettingsDrawer.tsx   # Left-side modal drawer (baseDir, projects, model, sessions)
+└── assets/                  # Expo default assets
 ```
 
 ### App State (`App.tsx`)
@@ -71,12 +81,16 @@ mobile/
 - `error`: Last error message
 - `settingsOpen`: Whether the settings drawer is open
 - `connected`: Whether the server is reachable
+- `baseDir`: Base directory setting from server (e.g. `"dev"`)
+- `projects`: Discovered git repos under baseDir
+- `currentProjectId`: Currently selected project path (null = show EmptyProjectView)
 
 ### App Lifecycle
 
-1. On mount: fetch models + sessions in parallel
-2. If sessions exist, select the first one; otherwise auto-create a session
-3. Send: append user message optimistically → call `/api/chat` → append assistant response
+1. On mount: fetch models + settings in parallel
+2. If `baseDir` is set, also fetch projects + sessions
+3. User selects a project → chat becomes active; no auto-selection
+4. Send: append user message optimistically → call `/api/chat` → append assistant response
 
 ### Layout
 
@@ -89,7 +103,8 @@ mobile/
 
 | Feature | Status |
 |---|---|
-| Session management (create/list/switch) | ✅ |
+| Project management (discover/select git repos) | ✅ |
+| Session management (create/list/switch, scoped to project) | ✅ |
 | Model selection (haiku/sonnet) | ✅ |
 | Markdown rendering (`react-native-markdown-display`) | ✅ |
 | Chat UI (bubbles, loading, auto-scroll) | ✅ |
@@ -108,6 +123,8 @@ src/
 │   ├── index.test-server.tsx      # Test entry point (sets CLAUDE_TEST_FAKE=true)
 │   ├── server.ts                  # Bun.serve HTTP server on port 3001
 │   ├── claude.ts                  # Claude CLI interface (--print / --resume)
+│   ├── settings.ts                # ~/.claudet/config.json read/write + baseDir validation
+│   ├── projects.ts                # Git repo discovery (discoverProjects)
 │   ├── utils/
 │   │   └── network.ts             # Local IP detection
 │   └── audio/

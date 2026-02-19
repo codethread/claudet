@@ -1,5 +1,9 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { getLocalIP } from './utils/network';
 import { createSession, getSession, listSessions, sendMessage } from './claude';
+import { loadSettings, saveSettings, validateBaseDir } from './settings';
+import { discoverProjects } from './projects';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
@@ -29,26 +33,73 @@ export function startServer() {
 				},
 			},
 
-			'/api/sessions': {
+			'/api/settings': {
 				OPTIONS(_req) {
 					return new Response(null, { status: 204, headers: CORS_HEADERS });
 				},
 				GET(_req) {
-					const sessions = listSessions().map((s) => ({
+					const settings = loadSettings();
+					return corsJson(settings);
+				},
+				async POST(req) {
+					try {
+						const body = (await req.json().catch(() => ({}))) as { baseDir?: unknown };
+						const baseDir = validateBaseDir(body.baseDir);
+						const settings = { baseDir };
+						saveSettings(settings);
+						return corsJson(settings);
+					} catch (error) {
+						return corsJson(
+							{ error: error instanceof Error ? error.message : 'Invalid request' },
+							400,
+						);
+					}
+				},
+			},
+
+			'/api/projects': {
+				OPTIONS(_req) {
+					return new Response(null, { status: 204, headers: CORS_HEADERS });
+				},
+				GET(_req) {
+					const { baseDir } = loadSettings();
+					if (!baseDir) return corsJson({ projects: [] });
+					const basePath = join(homedir(), baseDir);
+					const projects = discoverProjects(basePath);
+					return corsJson({ projects });
+				},
+			},
+
+			'/api/sessions': {
+				OPTIONS(_req) {
+					return new Response(null, { status: 204, headers: CORS_HEADERS });
+				},
+				GET(req) {
+					const url = new URL(req.url);
+					const projectPath = url.searchParams.get('projectPath') ?? undefined;
+					const sessions = listSessions(projectPath).map((s) => ({
 						id: s.id,
 						model: s.model,
 						createdAt: s.createdAt.toISOString(),
+						projectPath: s.projectPath,
 					}));
 					return corsJson({ sessions });
 				},
-				async POST(_req) {
-					const body = (await _req.json().catch(() => ({}))) as { model?: string };
+				async POST(req) {
+					const body = (await req.json().catch(() => ({}))) as {
+						model?: string;
+						projectPath?: unknown;
+					};
+					if (!body.projectPath || typeof body.projectPath !== 'string') {
+						return corsJson({ error: 'projectPath is required' }, 400);
+					}
 					const model = body.model === 'sonnet' ? 'sonnet' : 'haiku';
-					const session = createSession(model);
+					const session = createSession(model, body.projectPath);
 					return corsJson({
 						id: session.id,
 						model: session.model,
 						createdAt: session.createdAt.toISOString(),
+						projectPath: session.projectPath,
 					});
 				},
 			},
