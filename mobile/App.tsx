@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
+	Animated,
 	StyleSheet,
 	Text,
 	View,
@@ -11,6 +12,8 @@ import {
 	KeyboardAvoidingView,
 	Platform,
 	useColorScheme,
+	type NativeSyntheticEvent,
+	type NativeScrollEvent,
 } from 'react-native';
 import { SERVER_URL, fetchSessions, fetchModels, createSession, sendChat } from './api';
 import { ChatMessage } from './components/ChatMessage';
@@ -30,8 +33,30 @@ export default function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [connected, setConnected] = useState(false);
+	const [showScrollButton, setShowScrollButton] = useState(false);
 
 	const scrollRef = useRef<ScrollView>(null);
+	const isNearBottomRef = useRef(true);
+	const bounceAnim = useRef(new Animated.Value(0)).current;
+
+	useEffect(() => {
+		if (!showScrollButton) return;
+		bounceAnim.setValue(0);
+		Animated.sequence([
+			Animated.timing(bounceAnim, { toValue: 7, duration: 140, useNativeDriver: true }),
+			Animated.timing(bounceAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
+			Animated.timing(bounceAnim, { toValue: 4, duration: 110, useNativeDriver: true }),
+			Animated.timing(bounceAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
+		]).start();
+	}, [showScrollButton, bounceAnim]);
+
+	const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+		const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+		const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+		const near = distanceFromBottom < 80;
+		isNearBottomRef.current = near;
+		if (near) setShowScrollButton(false);
+	};
 
 	const currentMessages: Message[] = currentSessionId
 		? (messagesBySession.get(currentSessionId) ?? [])
@@ -102,6 +127,7 @@ export default function App() {
 		const userMessage = input.trim();
 		setInput('');
 		appendMessage(currentSessionId, { role: 'user', content: userMessage });
+		isNearBottomRef.current = true; // user just sent, always scroll
 		setLoading(true);
 		setError(null);
 
@@ -112,7 +138,11 @@ export default function App() {
 			setError(`Error: ${e instanceof Error ? e.message : 'Unknown error'}`);
 		} finally {
 			setLoading(false);
-			setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+			if (isNearBottomRef.current) {
+				setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+			} else {
+				setShowScrollButton(true);
+			}
 		}
 	};
 
@@ -154,6 +184,8 @@ export default function App() {
 				style={styles.messages}
 				contentContainerStyle={styles.messagesContent}
 				keyboardShouldPersistTaps="handled"
+				onScroll={handleScroll}
+				scrollEventThrottle={100}
 			>
 				{currentMessages.length === 0 && !error && (
 					<Text style={styles.emptyText}>Send a message to start chatting</Text>
@@ -170,6 +202,22 @@ export default function App() {
 				)}
 				{error && <Text style={styles.errorText}>{error}</Text>}
 			</ScrollView>
+
+			{showScrollButton && (
+				<Animated.View
+					style={[styles.scrollButtonWrap, { transform: [{ translateY: bounceAnim }] }]}
+				>
+					<Pressable
+						style={styles.scrollButton}
+						onPress={() => {
+							scrollRef.current?.scrollToEnd({ animated: true });
+							setShowScrollButton(false);
+						}}
+					>
+						<Text style={styles.scrollButtonText}>↓</Text>
+					</Pressable>
+				</Animated.View>
+			)}
 
 			{/* Input row */}
 			<View style={[styles.inputRow, { backgroundColor: headerBg, borderTopColor: inputBorder }]}>
@@ -298,5 +346,31 @@ const styles = StyleSheet.create({
 		color: '#fff',
 		fontSize: 18,
 		fontWeight: '700',
+	},
+	scrollButtonWrap: {
+		position: 'absolute',
+		bottom: 76,
+		left: 0,
+		right: 0,
+		alignItems: 'center',
+	},
+	scrollButton: {
+		width: 40,
+		height: 40,
+		borderRadius: 20,
+		backgroundColor: '#007AFF',
+		justifyContent: 'center',
+		alignItems: 'center',
+		shadowColor: '#000',
+		shadowOffset: { width: 0, height: 2 },
+		shadowOpacity: 0.25,
+		shadowRadius: 4,
+		elevation: 5,
+	},
+	scrollButtonText: {
+		color: '#fff',
+		fontSize: 20,
+		fontWeight: '700',
+		lineHeight: 24,
 	},
 });

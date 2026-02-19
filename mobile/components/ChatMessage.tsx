@@ -19,41 +19,51 @@ export function ChatMessage({ message }: Props) {
 			: assistantMarkdownStylesLight;
 
 	return (
-		<View
-			style={[
-				styles.bubble,
-				isUser
-					? styles.userBubble
-					: isDark
-						? styles.assistantBubbleDark
-						: styles.assistantBubbleLight,
-			]}
-		>
-			<Markdown style={markdownStyles}>{message.content}</Markdown>
+		<View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
+			<View
+				style={[
+					styles.bubble,
+					isUser
+						? styles.userBubble
+						: isDark
+							? styles.assistantBubbleDark
+							: styles.assistantBubbleLight,
+				]}
+			>
+				<Markdown style={markdownStyles}>{message.content}</Markdown>
+			</View>
 		</View>
 	);
 }
 
 const styles = StyleSheet.create({
+	row: {
+		flexDirection: 'row',
+		marginVertical: 4,
+	},
+	rowEnd: {
+		justifyContent: 'flex-end',
+	},
+	rowStart: {
+		justifyContent: 'flex-start',
+	},
 	bubble: {
-		maxWidth: '85%',
+		maxWidth: 600,
+		width: '95%',
 		paddingHorizontal: 14,
 		paddingVertical: 10,
 		borderRadius: 18,
-		marginVertical: 4,
+		flexShrink: 1,
 	},
 	userBubble: {
-		alignSelf: 'flex-end',
 		backgroundColor: '#007AFF',
 	},
 	assistantBubbleLight: {
-		alignSelf: 'flex-start',
 		backgroundColor: '#fff',
 		borderWidth: 1,
 		borderColor: '#e0e0e0',
 	},
 	assistantBubbleDark: {
-		alignSelf: 'flex-start',
 		backgroundColor: '#2c2c2e',
 		borderWidth: 1,
 		borderColor: '#3a3a3c',
