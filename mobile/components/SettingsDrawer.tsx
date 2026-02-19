@@ -9,9 +9,10 @@ import {
 	Animated,
 	useWindowDimensions,
 	TextInput,
+	Switch,
 } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
-import type { Project, Session } from '../types';
+import type { PermissionMode, Project, Session } from '../types';
 
 interface Props {
 	visible: boolean;
@@ -29,6 +30,9 @@ interface Props {
 	currentProjectId: string | null;
 	onSelectProject: (id: string) => void;
 	onSaveBaseDir: (value: string) => Promise<void>;
+	// Permissions
+	permissionMode: PermissionMode;
+	onTogglePermissionMode: (mode: PermissionMode) => void;
 }
 
 function BaseDirInput({
@@ -129,6 +133,8 @@ export function SettingsDrawer({
 	currentProjectId,
 	onSelectProject,
 	onSaveBaseDir,
+	permissionMode,
+	onTogglePermissionMode,
 }: Props) {
 	const colorScheme = useColorScheme();
 	const isDark = colorScheme === 'dark';
@@ -224,9 +230,7 @@ export function SettingsDrawer({
 											<Text style={[styles.projectName, { color: text }]} numberOfLines={1}>
 												{project.name}
 											</Text>
-											{currentProjectId === project.id && (
-												<Text style={styles.checkmark}>✓</Text>
-											)}
+											{currentProjectId === project.id && <Text style={styles.checkmark}>✓</Text>}
 										</Pressable>
 									))
 								)}
@@ -251,6 +255,31 @@ export function SettingsDrawer({
 								{selectedModel === model && <Text style={styles.checkmark}>✓</Text>}
 							</Pressable>
 						))}
+
+						{/* Permission Mode — per session */}
+						{currentSessionId ? (
+							<>
+								<Text style={[styles.sectionLabel, { color: subtext, marginTop: 16 }]}>
+									Permissions
+								</Text>
+								<View style={[styles.toggleRow, { borderColor: border }]}>
+									<View style={styles.toggleInfo}>
+										<Text style={[styles.toggleLabel, { color: text }]}>Bypass Permissions</Text>
+										<Text style={[styles.toggleDesc, { color: subtext }]}>
+											--dangerously-skip-permissions
+										</Text>
+									</View>
+									<Switch
+										value={permissionMode === 'dangerouslySkipPermissions'}
+										onValueChange={(val) =>
+											onTogglePermissionMode(val ? 'dangerouslySkipPermissions' : 'allowEdits')
+										}
+										trackColor={{ false: '#767577', true: '#ff9500' }}
+										thumbColor="#fff"
+									/>
+								</View>
+							</>
+						) : null}
 
 						{/* New session button — only if project selected */}
 						{currentProjectId ? (
@@ -288,6 +317,9 @@ export function SettingsDrawer({
 											{session.id.slice(0, 8)}…
 										</Text>
 										<Text style={[styles.sessionModel, { color: subtext }]}>{session.model}</Text>
+										{session.permissionMode === 'dangerouslySkipPermissions' ? (
+											<Text style={styles.dangerBadge}>⚠️</Text>
+										) : null}
 									</Pressable>
 								))}
 							</>
@@ -437,5 +469,31 @@ const styles = StyleSheet.create({
 		fontSize: 14,
 		fontStyle: 'italic',
 		paddingVertical: 8,
+	},
+	dangerBadge: {
+		fontSize: 14,
+		marginLeft: 6,
+	},
+	toggleRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		padding: 12,
+		borderRadius: 10,
+		borderWidth: 1,
+		marginBottom: 8,
+	},
+	toggleInfo: {
+		flex: 1,
+		marginRight: 8,
+	},
+	toggleLabel: {
+		fontSize: 15,
+		fontWeight: '500',
+	},
+	toggleDesc: {
+		fontSize: 11,
+		fontFamily: 'monospace',
+		marginTop: 2,
 	},
 });

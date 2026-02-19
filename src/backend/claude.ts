@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+export type PermissionMode = 'allowEdits' | 'dangerouslySkipPermissions';
+
 export type ClaudeModel = 'haiku' | 'sonnet';
 
 export interface SessionMessage {
@@ -14,11 +16,16 @@ export interface Session {
 	messageCount: number;
 	messages: SessionMessage[];
 	projectPath: string;
+	permissionMode: PermissionMode;
 }
 
 const sessions = new Map<string, Session>();
 
-export function createSession(model: ClaudeModel = 'haiku', projectPath: string): Session {
+export function createSession(
+	model: ClaudeModel = 'haiku',
+	projectPath: string,
+	permissionMode: PermissionMode = 'allowEdits',
+): Session {
 	const id = randomUUID();
 	const session: Session = {
 		id,
@@ -27,8 +34,16 @@ export function createSession(model: ClaudeModel = 'haiku', projectPath: string)
 		messageCount: 0,
 		messages: [],
 		projectPath,
+		permissionMode,
 	};
 	sessions.set(id, session);
+	return session;
+}
+
+export function setSessionPermissionMode(id: string, mode: PermissionMode): Session | undefined {
+	const session = sessions.get(id);
+	if (!session) return undefined;
+	session.permissionMode = mode;
 	return session;
 }
 
@@ -57,9 +72,13 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 	}
 
 	const isFirstMessage = session.messageCount === 0;
+	const permArgs =
+		session.permissionMode === 'dangerouslySkipPermissions'
+			? ['--dangerously-skip-permissions']
+			: ['--allowedTools', 'Bash', 'Edit', 'Write', 'MultiEdit', 'Read', 'Glob', 'Grep'];
 	const args: string[] = isFirstMessage
-		? ['--session-id', sessionId, '--model', session.model, '--print', message]
-		: ['--resume', sessionId, '--print', message];
+		? ['--session-id', sessionId, '--model', session.model, ...permArgs, '--print', message]
+		: ['--resume', sessionId, ...permArgs, '--print', message];
 
 	session.messageCount++;
 	session.messages.push({ role: 'user', content: message });

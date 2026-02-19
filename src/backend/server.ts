@@ -1,7 +1,13 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getLocalIP } from './utils/network';
-import { createSession, getSession, listSessions, sendMessage } from './claude';
+import {
+	createSession,
+	getSession,
+	listSessions,
+	sendMessage,
+	setSessionPermissionMode,
+} from './claude';
 import { loadSettings, saveSettings, validateBaseDir } from './settings';
 import { discoverProjects } from './projects';
 
@@ -82,6 +88,7 @@ export function startServer() {
 						model: s.model,
 						createdAt: s.createdAt.toISOString(),
 						projectPath: s.projectPath,
+						permissionMode: s.permissionMode,
 					}));
 					return corsJson({ sessions });
 				},
@@ -89,17 +96,23 @@ export function startServer() {
 					const body = (await req.json().catch(() => ({}))) as {
 						model?: string;
 						projectPath?: unknown;
+						permissionMode?: unknown;
 					};
 					if (!body.projectPath || typeof body.projectPath !== 'string') {
 						return corsJson({ error: 'projectPath is required' }, 400);
 					}
 					const model = body.model === 'sonnet' ? 'sonnet' : 'haiku';
-					const session = createSession(model, body.projectPath);
+					const permissionMode =
+						body.permissionMode === 'dangerouslySkipPermissions'
+							? ('dangerouslySkipPermissions' as const)
+							: ('allowEdits' as const);
+					const session = createSession(model, body.projectPath, permissionMode);
 					return corsJson({
 						id: session.id,
 						model: session.model,
 						createdAt: session.createdAt.toISOString(),
 						projectPath: session.projectPath,
+						permissionMode: session.permissionMode,
 					});
 				},
 			},
@@ -133,18 +146,38 @@ export function startServer() {
 			},
 		},
 
-		fetch(req) {
+		async fetch(req) {
 			if (req.method === 'OPTIONS') {
 				return new Response(null, { status: 204, headers: CORS_HEADERS });
 			}
 
-			// GET /api/sessions/:id/messages
 			const url = new URL(req.url);
-			const match = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
-			if (match?.[1] && req.method === 'GET') {
-				const session = getSession(match[1]);
+
+			// GET /api/sessions/:id/messages
+			const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+			if (messagesMatch?.[1] && req.method === 'GET') {
+				const session = getSession(messagesMatch[1]);
 				if (!session) return corsJson({ error: 'Session not found' }, 404);
 				return corsJson({ messages: session.messages });
+			}
+
+			// PATCH /api/sessions/:id
+			const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+			if (sessionMatch?.[1] && req.method === 'PATCH') {
+				const body = (await req.json().catch(() => ({}))) as { permissionMode?: unknown };
+				const mode =
+					body.permissionMode === 'dangerouslySkipPermissions'
+						? ('dangerouslySkipPermissions' as const)
+						: ('allowEdits' as const);
+				const session = setSessionPermissionMode(sessionMatch[1], mode);
+				if (!session) return corsJson({ error: 'Session not found' }, 404);
+				return corsJson({
+					id: session.id,
+					model: session.model,
+					createdAt: session.createdAt.toISOString(),
+					projectPath: session.projectPath,
+					permissionMode: session.permissionMode,
+				});
 			}
 
 			return new Response('Not found', { status: 404, headers: CORS_HEADERS });

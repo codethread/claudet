@@ -16,6 +16,7 @@ import {
 	fetchModels,
 	fetchSettings,
 	saveSettings as apiSaveSettings,
+	updateSession as apiUpdateSession,
 	fetchProjects,
 	createSession,
 	sendChat,
@@ -26,7 +27,7 @@ import { EmptyProjectView } from './components/EmptyProjectView';
 import { Header } from './components/Header';
 import { InputBar } from './components/InputBar';
 import { SettingsDrawer } from './components/SettingsDrawer';
-import type { Message, Project, Session } from './types';
+import type { Message, PermissionMode, Project, Session } from './types';
 
 export default function App() {
 	return (
@@ -98,6 +99,15 @@ function AppContent() {
 			setProjects(discovered);
 		}
 	}, []);
+
+	const handleSetSessionPermissionMode = useCallback(
+		async (mode: PermissionMode) => {
+			if (!currentSessionId) return;
+			const updated = await apiUpdateSession(currentSessionId, { permissionMode: mode });
+			setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+		},
+		[currentSessionId],
+	);
 
 	// On mount: load models + settings in parallel; if baseDir set, also load projects + sessions
 	useEffect(() => {
@@ -207,6 +217,9 @@ function AppContent() {
 		? sessions.filter((s) => s.projectPath === currentProjectId)
 		: [];
 
+	const currentSession = sessions.find((s) => s.id === currentSessionId) ?? null;
+	const isDangerousMode = currentSession?.permissionMode === 'dangerouslySkipPermissions';
+
 	return (
 		<KeyboardAvoidingView
 			style={[styles.container, { backgroundColor: isDark ? '#000' : '#f5f5f5' }]}
@@ -218,6 +231,7 @@ function AppContent() {
 				greeting={greeting}
 				onOpenSettings={() => setSettingsOpen(true)}
 				onNewSession={handleNewSession}
+				dangerousMode={isDangerousMode}
 			/>
 
 			{currentProjectId ? (
@@ -270,6 +284,8 @@ function AppContent() {
 				currentProjectId={currentProjectId}
 				onSelectProject={handleSelectProject}
 				onSaveBaseDir={handleSaveBaseDir}
+				permissionMode={currentSession?.permissionMode ?? 'allowEdits'}
+				onTogglePermissionMode={handleSetSessionPermissionMode}
 			/>
 		</KeyboardAvoidingView>
 	);

@@ -3,15 +3,7 @@ import { join } from 'node:path';
 
 export type Project = { id: string; name: string; path: string };
 
-const SKIP_DIRS = new Set([
-	'node_modules',
-	'dist',
-	'build',
-	'target',
-	'.next',
-	'vendor',
-	'.git',
-]);
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'target', '.next', 'vendor', '.git']);
 
 export function discoverProjects(basePath: string, maxDepth = 3): Project[] {
 	const projects: Project[] = [];

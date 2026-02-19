@@ -1,5 +1,5 @@
 import Constants from 'expo-constants';
-import type { Message, Project, Session, Settings } from './types';
+import type { Message, PermissionMode, Project, Session, Settings } from './types';
 
 function getServerUrl(): string {
 	const hostUri =
@@ -28,6 +28,17 @@ export async function saveSettings(baseDir: string): Promise<Settings> {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ baseDir }),
+	});
+}
+
+export async function updateSession(
+	sessionId: string,
+	updates: { permissionMode: PermissionMode },
+): Promise<Session> {
+	return apiFetch<Session>(`/api/sessions/${sessionId}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(updates),
 	});
 }
 
