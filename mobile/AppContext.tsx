@@ -26,6 +26,8 @@ export interface AppState {
 	handleNewSession: () => Promise<void>;
 	handleSaveBaseDir: (value: string) => Promise<void>;
 	handleSetSessionPermissionMode: (mode: PermissionMode) => Promise<void>;
+	handleRenameSession: (id: string, name: string) => Promise<void>;
+	handleDeleteSession: (id: string) => Promise<void>;
 	send: () => Promise<void>;
 	scrollRef: RefObject<ScrollView | null>;
 	setShowScrollButton: (v: boolean) => void;
@@ -53,6 +55,8 @@ const defaultState: AppState = {
 	handleNewSession: async () => {},
 	handleSaveBaseDir: async () => {},
 	handleSetSessionPermissionMode: async () => {},
+	handleRenameSession: async () => {},
+	handleDeleteSession: async () => {},
 	send: async () => {},
 	scrollRef: { current: null },
 	setShowScrollButton: () => {},

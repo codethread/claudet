@@ -6,6 +6,7 @@ export type Session = {
 	createdAt: string;
 	projectPath: string;
 	permissionMode: PermissionMode;
+	name?: string;
 };
 export type Project = { id: string; name: string; path: string };
 export type Settings = { baseDir: string | null };

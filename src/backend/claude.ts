@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
 	dbAppendMessage,
 	dbCreateSession,
+	dbDeleteSession,
 	dbGetSession,
 	dbListSessions,
 	dbUpdateMessageCount,
@@ -25,6 +26,7 @@ export interface Session {
 	messages: SessionMessage[];
 	projectPath: string;
 	permissionMode: PermissionMode;
+	name?: string;
 }
 
 export function createSession(
@@ -52,6 +54,20 @@ export function setSessionPermissionMode(id: string, mode: PermissionMode): Sess
 	dbUpdateSession(id, { permissionMode: mode });
 	session.permissionMode = mode;
 	return session;
+}
+
+export function renameSession(id: string, name: string): Session | undefined {
+	const session = dbGetSession(id);
+	if (!session) return undefined;
+	dbUpdateSession(id, { name });
+	return { ...session, name };
+}
+
+export function deleteSession(id: string): boolean {
+	const session = dbGetSession(id);
+	if (!session) return false;
+	dbDeleteSession(id);
+	return true;
 }
 
 export function getSession(id: string): Session | undefined {

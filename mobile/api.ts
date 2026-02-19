@@ -33,13 +33,18 @@ export async function saveSettings(baseDir: string): Promise<Settings> {
 
 export async function updateSession(
 	sessionId: string,
-	updates: { permissionMode: PermissionMode },
+	updates: { permissionMode?: PermissionMode; name?: string },
 ): Promise<Session> {
 	return apiFetch<Session>(`/api/sessions/${sessionId}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(updates),
 	});
+}
+
+export async function deleteSession(id: string): Promise<void> {
+	const res = await fetch(`${SERVER_URL}/api/sessions/${id}`, { method: 'DELETE' });
+	if (!res.ok) throw new Error(`Failed to delete session: ${res.status}`);
 }
 
 export async function fetchProjects(): Promise<Project[]> {

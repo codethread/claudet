@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
 	StyleSheet,
 	KeyboardAvoidingView,
@@ -10,11 +11,14 @@ import { ChatArea } from '../components/ChatArea';
 import { EmptyProjectView } from '../components/EmptyProjectView';
 import { Header } from '../components/Header';
 import { InputBar } from '../components/InputBar';
+import { SessionActionModal } from '../components/SessionActionModal';
 import { SessionStrip } from '../components/SessionStrip';
+import type { Session } from '../types';
 
 export function SessionsScreen() {
 	const isDark = useColorScheme() === 'dark';
 	const insets = useSafeAreaInsets();
+	const [actionSession, setActionSession] = useState<Session | null>(null);
 
 	const {
 		sessions,
@@ -34,6 +38,8 @@ export function SessionsScreen() {
 		setShowScrollButton,
 		handleSelectProject,
 		handleNewSession,
+		handleRenameSession,
+		handleDeleteSession,
 		send,
 		onScroll,
 	} = useAppContext();
@@ -71,6 +77,7 @@ export function SessionsScreen() {
 						currentSessionId={currentSessionId}
 						onSelectSession={setCurrentSessionId}
 						onNewSession={handleNewSession}
+						onLongPressSession={(s) => setActionSession(s)}
 					/>
 
 					<ChatArea
@@ -105,6 +112,13 @@ export function SessionsScreen() {
 					onSelectProject={handleSelectProject}
 				/>
 			)}
+
+			<SessionActionModal
+				session={actionSession}
+				onClose={() => setActionSession(null)}
+				onRename={handleRenameSession}
+				onDelete={handleDeleteSession}
+			/>
 		</KeyboardAvoidingView>
 	);
 }

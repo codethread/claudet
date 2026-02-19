@@ -2,6 +2,7 @@ import { ScrollView, View, Text, Pressable, StyleSheet, useColorScheme } from 'r
 import type { Session } from '../types';
 
 function sessionLabel(session: Session): string {
+	if (session.name) return session.name;
 	const d = new Date(session.createdAt);
 	const now = new Date();
 	const isToday = d.toDateString() === now.toDateString();
@@ -16,9 +17,16 @@ interface Props {
 	currentSessionId: string | null;
 	onSelectSession: (id: string) => void;
 	onNewSession: () => void;
+	onLongPressSession: (session: Session) => void;
 }
 
-export function SessionStrip({ sessions, currentSessionId, onSelectSession, onNewSession }: Props) {
+export function SessionStrip({
+	sessions,
+	currentSessionId,
+	onSelectSession,
+	onNewSession,
+	onLongPressSession,
+}: Props) {
 	const isDark = useColorScheme() === 'dark';
 
 	const bg = isDark ? '#1c1c1e' : '#f2f2f7';
@@ -45,6 +53,7 @@ export function SessionStrip({ sessions, currentSessionId, onSelectSession, onNe
 								{ backgroundColor: active ? activeBg : chipBg, borderColor: border },
 							]}
 							onPress={() => onSelectSession(session.id)}
+							onLongPress={() => onLongPressSession(session)}
 						>
 							<Text style={[styles.chipLabel, { color: active ? '#fff' : text }]} numberOfLines={1}>
 								{sessionLabel(session)}
@@ -84,6 +93,7 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 14,
 		paddingVertical: 6,
 		alignItems: 'center',
+		maxWidth: 120,
 	},
 	chipLabel: {
 		fontSize: 13,

@@ -21,9 +21,16 @@ db.run(`
     created_at TEXT NOT NULL,
     project_path TEXT NOT NULL,
     permission_mode TEXT NOT NULL DEFAULT 'allowEdits',
-    message_count INTEGER NOT NULL DEFAULT 0
+    message_count INTEGER NOT NULL DEFAULT 0,
+    name TEXT
   )
 `);
+
+try {
+  db.run(`ALTER TABLE sessions ADD COLUMN name TEXT`);
+} catch {
+  // column already exists
+}
 
 db.run(`
   CREATE TABLE IF NOT EXISTS messages (
@@ -38,12 +45,12 @@ export { db };
 
 // Prepared statements for performance
 const stmtInsertSession = db.prepare(`
-  INSERT INTO sessions (id, model, created_at, project_path, permission_mode, message_count)
-  VALUES ($id, $model, $created_at, $project_path, $permission_mode, $message_count)
+  INSERT INTO sessions (id, model, created_at, project_path, permission_mode, message_count, name)
+  VALUES ($id, $model, $created_at, $project_path, $permission_mode, $message_count, $name)
 `);
 
 const stmtGetSession = db.prepare(`
-  SELECT id, model, created_at, project_path, permission_mode, message_count
+  SELECT id, model, created_at, project_path, permission_mode, message_count, name
   FROM sessions WHERE id = $id
 `);
 
@@ -52,12 +59,12 @@ const stmtGetMessages = db.prepare(`
 `);
 
 const stmtListSessions = db.prepare(`
-  SELECT id, model, created_at, project_path, permission_mode, message_count
+  SELECT id, model, created_at, project_path, permission_mode, message_count, name
   FROM sessions ORDER BY created_at DESC
 `);
 
 const stmtListSessionsByProject = db.prepare(`
-  SELECT id, model, created_at, project_path, permission_mode, message_count
+  SELECT id, model, created_at, project_path, permission_mode, message_count, name
   FROM sessions WHERE project_path = $project_path ORDER BY created_at DESC
 `);
 
@@ -69,8 +76,16 @@ const stmtUpdateMessageCount = db.prepare(`
   UPDATE sessions SET message_count = $message_count WHERE id = $id
 `);
 
+const stmtUpdateName = db.prepare(`
+  UPDATE sessions SET name = $name WHERE id = $id
+`);
+
 const stmtInsertMessage = db.prepare(`
   INSERT INTO messages (session_id, role, content) VALUES ($session_id, $role, $content)
+`);
+
+const stmtDeleteSession = db.prepare(`
+  DELETE FROM sessions WHERE id = $id
 `);
 
 interface SessionRow {
@@ -80,6 +95,7 @@ interface SessionRow {
 	project_path: string;
 	permission_mode: string;
 	message_count: number;
+	name: string | null;
 }
 
 interface MessageRow {
@@ -96,6 +112,7 @@ function rowToSession(row: SessionRow, messages: SessionMessage[] = []): Session
 		messages,
 		projectPath: row.project_path,
 		permissionMode: row.permission_mode as PermissionMode,
+		name: row.name ?? undefined,
 	};
 }
 
@@ -107,6 +124,7 @@ export function dbCreateSession(session: Session): void {
 		$project_path: session.projectPath,
 		$permission_mode: session.permissionMode,
 		$message_count: session.messageCount,
+		$name: session.name ?? null,
 	});
 }
 
@@ -134,7 +152,7 @@ export function dbListSessions(projectPath?: string): Session[] {
 
 export function dbUpdateSession(
 	id: string,
-	fields: Partial<Pick<Session, 'messageCount' | 'permissionMode'>>,
+	fields: Partial<Pick<Session, 'messageCount' | 'permissionMode' | 'name'>>,
 ): void {
 	if (fields.permissionMode !== undefined) {
 		stmtUpdatePermissionMode.run({ $permission_mode: fields.permissionMode, $id: id });
@@ -142,6 +160,13 @@ export function dbUpdateSession(
 	if (fields.messageCount !== undefined) {
 		stmtUpdateMessageCount.run({ $message_count: fields.messageCount, $id: id });
 	}
+	if (fields.name !== undefined) {
+		stmtUpdateName.run({ $name: fields.name, $id: id });
+	}
+}
+
+export function dbDeleteSession(id: string): void {
+	stmtDeleteSession.run({ $id: id });
 }
 
 export function dbAppendMessage(sessionId: string, msg: SessionMessage): void {

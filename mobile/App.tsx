@@ -16,6 +16,7 @@ import {
 	fetchSettings,
 	saveSettings as apiSaveSettings,
 	updateSession as apiUpdateSession,
+	deleteSession as apiDeleteSession,
 	fetchProjects,
 	createSession,
 	sendChat,
@@ -88,6 +89,20 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 			if (!currentSessionId) return;
 			const updated = await apiUpdateSession(currentSessionId, { permissionMode: mode });
 			setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+		},
+		[currentSessionId],
+	);
+
+	const handleRenameSession = useCallback(async (id: string, name: string) => {
+		const updated = await apiUpdateSession(id, { name });
+		setSessions((prev) => prev.map((s) => (s.id === id ? updated : s)));
+	}, []);
+
+	const handleDeleteSession = useCallback(
+		async (id: string) => {
+			await apiDeleteSession(id);
+			setSessions((prev) => prev.filter((s) => s.id !== id));
+			if (currentSessionId === id) setCurrentSessionId(null);
 		},
 		[currentSessionId],
 	);
@@ -213,6 +228,8 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				handleNewSession,
 				handleSaveBaseDir,
 				handleSetSessionPermissionMode,
+				handleRenameSession,
+				handleDeleteSession,
 				send,
 				scrollRef,
 				setShowScrollButton,

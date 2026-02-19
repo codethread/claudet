@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import { getLocalIP } from './utils/network';
 import {
 	createSession,
+	deleteSession,
 	getSession,
 	listSessions,
+	renameSession,
 	sendMessage,
 	setSessionPermissionMode,
 } from './claude';
@@ -13,7 +15,7 @@ import { discoverProjects } from './projects';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+	'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -89,6 +91,7 @@ export function startServer() {
 						createdAt: s.createdAt.toISOString(),
 						projectPath: s.projectPath,
 						permissionMode: s.permissionMode,
+						name: s.name,
 					}));
 					return corsJson({ sessions });
 				},
@@ -113,6 +116,7 @@ export function startServer() {
 						createdAt: session.createdAt.toISOString(),
 						projectPath: session.projectPath,
 						permissionMode: session.permissionMode,
+						name: session.name,
 					});
 				},
 			},
@@ -161,15 +165,29 @@ export function startServer() {
 				return corsJson({ messages: session.messages });
 			}
 
-			// PATCH /api/sessions/:id
 			const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+
+			// PATCH /api/sessions/:id
 			if (sessionMatch?.[1] && req.method === 'PATCH') {
-				const body = (await req.json().catch(() => ({}))) as { permissionMode?: unknown };
-				const mode =
-					body.permissionMode === 'dangerouslySkipPermissions'
-						? ('dangerouslySkipPermissions' as const)
-						: ('allowEdits' as const);
-				const session = setSessionPermissionMode(sessionMatch[1], mode);
+				const id = sessionMatch[1];
+				const body = (await req.json().catch(() => ({}))) as {
+					permissionMode?: unknown;
+					name?: unknown;
+				};
+
+				if (body.permissionMode !== undefined) {
+					const mode =
+						body.permissionMode === 'dangerouslySkipPermissions'
+							? ('dangerouslySkipPermissions' as const)
+							: ('allowEdits' as const);
+					setSessionPermissionMode(id, mode);
+				}
+
+				if (typeof body.name === 'string' && body.name.trim()) {
+					renameSession(id, body.name.trim());
+				}
+
+				const session = getSession(id);
 				if (!session) return corsJson({ error: 'Session not found' }, 404);
 				return corsJson({
 					id: session.id,
@@ -177,7 +195,15 @@ export function startServer() {
 					createdAt: session.createdAt.toISOString(),
 					projectPath: session.projectPath,
 					permissionMode: session.permissionMode,
+					name: session.name,
 				});
+			}
+
+			// DELETE /api/sessions/:id
+			if (sessionMatch?.[1] && req.method === 'DELETE') {
+				const deleted = deleteSession(sessionMatch[1]);
+				if (!deleted) return corsJson({ error: 'Session not found' }, 404);
+				return corsJson({ success: true });
 			}
 
 			return new Response('Not found', { status: 404, headers: CORS_HEADERS });
