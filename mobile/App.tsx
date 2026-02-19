@@ -1,17 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-	StyleSheet,
 	type ScrollView,
-	KeyboardAvoidingView,
-	Platform,
-	useColorScheme,
 	type NativeSyntheticEvent,
 	type NativeScrollEvent,
+	useColorScheme,
+	Text,
 } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
-	SERVER_URL,
 	fetchSessions,
 	fetchModels,
 	fetchSettings,
@@ -21,26 +20,16 @@ import {
 	createSession,
 	sendChat,
 	fetchSessionMessages,
+	SERVER_URL,
 } from './api';
-import { ChatArea } from './components/ChatArea';
-import { EmptyProjectView } from './components/EmptyProjectView';
-import { Header } from './components/Header';
-import { InputBar } from './components/InputBar';
-import { SettingsDrawer } from './components/SettingsDrawer';
+import { AppContext } from './AppContext';
+import { SessionsScreen } from './screens/SessionsScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import type { Message, PermissionMode, Project, Session } from './types';
 
-export default function App() {
-	return (
-		<SafeAreaProvider>
-			<AppContent />
-		</SafeAreaProvider>
-	);
-}
+const Tab = createBottomTabNavigator();
 
-function AppContent() {
-	const isDark = useColorScheme() === 'dark';
-	const insets = useSafeAreaInsets();
-
+function AppStateProvider({ children }: { children: React.ReactNode }) {
 	const [sessions, setSessions] = useState<Session[]>([]);
 	const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 	const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map());
@@ -48,12 +37,10 @@ function AppContent() {
 	const [input, setInput] = useState('');
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [connected, setConnected] = useState(false);
 	const [showScrollButton, setShowScrollButton] = useState(false);
 	const [loadingMessages, setLoadingMessages] = useState(false);
 
-	// Project management state
 	const [baseDir, setBaseDir] = useState<string | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
@@ -61,10 +48,6 @@ function AppContent() {
 	const scrollRef = useRef<ScrollView>(null);
 	const fetchedSessionsRef = useRef<Set<string>>(new Set());
 	const isNearBottomRef = useRef(true);
-
-	const currentMessages: Message[] = currentSessionId
-		? (messagesBySession.get(currentSessionId) ?? [])
-		: [];
 
 	const appendMessage = (sessionId: string, message: Message) => {
 		setMessagesBySession((prev) => {
@@ -133,7 +116,6 @@ function AppContent() {
 
 					setProjects(discovered);
 					setSessions(existingSessions);
-					// Do NOT auto-select project or create session
 				}
 			} catch (e) {
 				if (!cancelled) {
@@ -151,7 +133,7 @@ function AppContent() {
 		};
 	}, []);
 
-	// Fetch message history from server when switching to a session we haven't loaded yet
+	// Fetch message history when switching to a session we haven't loaded yet
 	useEffect(() => {
 		if (!currentSessionId) return;
 		if (fetchedSessionsRef.current.has(currentSessionId)) return;
@@ -175,7 +157,7 @@ function AppContent() {
 			.finally(() => setLoadingMessages(false));
 	}, [currentSessionId]);
 
-	const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+	const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
 		const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
 		const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
 		const near = distanceFromBottom < 80;
@@ -208,91 +190,94 @@ function AppContent() {
 		}
 	};
 
-	const hour = new Date().getHours();
-	const greeting =
-		hour < 12 ? 'Good morning, Adam' : hour < 18 ? 'Good afternoon, Adam' : 'Good evening, Adam';
-
-	// Sessions filtered to current project
-	const projectSessions = currentProjectId
-		? sessions.filter((s) => s.projectPath === currentProjectId)
-		: [];
-
-	const currentSession = sessions.find((s) => s.id === currentSessionId) ?? null;
-	const isDangerousMode = currentSession?.permissionMode === 'dangerouslySkipPermissions';
-
 	return (
-		<KeyboardAvoidingView
-			style={[styles.container, { backgroundColor: isDark ? '#000' : '#f5f5f5' }]}
-			behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+		<AppContext.Provider
+			value={{
+				sessions,
+				currentSessionId,
+				messagesBySession,
+				selectedModel,
+				input,
+				loading,
+				error,
+				connected,
+				showScrollButton,
+				loadingMessages,
+				baseDir,
+				projects,
+				currentProjectId,
+				setInput,
+				setCurrentSessionId,
+				setSelectedModel,
+				handleSelectProject,
+				handleNewSession,
+				handleSaveBaseDir,
+				handleSetSessionPermissionMode,
+				send,
+				scrollRef,
+				setShowScrollButton,
+				onScroll,
+			}}
 		>
-			<StatusBar style={isDark ? 'light' : 'dark'} />
-
-			<Header
-				greeting={greeting}
-				onOpenSettings={() => setSettingsOpen(true)}
-				onNewSession={handleNewSession}
-				dangerousMode={isDangerousMode}
-			/>
-
-			{currentProjectId ? (
-				<>
-					<ChatArea
-						messages={currentMessages}
-						loading={loading}
-						loadingMessages={loadingMessages}
-						error={error}
-						scrollRef={scrollRef}
-						showScrollButton={showScrollButton}
-						onScrollToBottom={() => {
-							scrollRef.current?.scrollToEnd({ animated: true });
-							setShowScrollButton(false);
-						}}
-						onScroll={handleScroll}
-						bottomOffset={76 + insets.bottom}
-					/>
-
-					<InputBar
-						input={input}
-						onChangeInput={setInput}
-						onSend={send}
-						editable={!!currentSessionId && !loading}
-						canSend={!!currentSessionId && !loading && !!input.trim()}
-						bottomInset={insets.bottom}
-					/>
-				</>
-			) : (
-				<EmptyProjectView
-					baseDir={baseDir}
-					projects={projects}
-					onOpenSettings={() => setSettingsOpen(true)}
-					onSelectProject={handleSelectProject}
-				/>
-			)}
-
-			<SettingsDrawer
-				visible={settingsOpen}
-				onClose={() => setSettingsOpen(false)}
-				sessions={projectSessions}
-				currentSessionId={currentSessionId}
-				selectedModel={selectedModel}
-				connected={connected}
-				onSelectSession={(id) => setCurrentSessionId(id)}
-				onNewSession={handleNewSession}
-				onSelectModel={(model) => setSelectedModel(model)}
-				baseDir={baseDir}
-				projects={projects}
-				currentProjectId={currentProjectId}
-				onSelectProject={handleSelectProject}
-				onSaveBaseDir={handleSaveBaseDir}
-				permissionMode={currentSession?.permissionMode ?? 'allowEdits'}
-				onTogglePermissionMode={handleSetSessionPermissionMode}
-			/>
-		</KeyboardAvoidingView>
+			{children}
+		</AppContext.Provider>
 	);
 }
 
-const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-	},
-});
+function TabBar() {
+	const isDark = useColorScheme() === 'dark';
+
+	return (
+		<Tab.Navigator
+			screenOptions={{
+				headerShown: false,
+				tabBarStyle: {
+					backgroundColor: isDark ? '#1c1c1e' : '#fff',
+					borderTopColor: isDark ? '#3a3a3c' : '#e0e0e0',
+				},
+				tabBarActiveTintColor: isDark ? '#fff' : '#007AFF',
+				tabBarInactiveTintColor: isDark ? '#8e8e93' : '#8e8e93',
+				tabBarLabelStyle: {
+					fontSize: 12,
+					fontWeight: '500',
+				},
+			}}
+		>
+			<Tab.Screen
+				name="Sessions"
+				component={SessionsScreen}
+				options={{
+					tabBarLabel: 'Sessions',
+					tabBarIcon: ({ color }: { color: string }) => (
+						<Text style={{ fontSize: 20, color }}>💬</Text>
+					),
+				}}
+			/>
+			<Tab.Screen
+				name="Settings"
+				component={SettingsScreen}
+				options={{
+					tabBarLabel: 'Settings',
+					tabBarIcon: ({ color }: { color: string }) => (
+						<Text style={{ fontSize: 20, color }}>⚙️</Text>
+					),
+				}}
+			/>
+		</Tab.Navigator>
+	);
+}
+
+export default function App() {
+	const isDark = useColorScheme() === 'dark';
+
+	return (
+		<SafeAreaProvider>
+			<AppStateProvider>
+				<NavigationContainer>
+					<StatusBar style={isDark ? 'light' : 'dark'} />
+					<TabBar />
+				</NavigationContainer>
+			</AppStateProvider>
+		</SafeAreaProvider>
+	);
+}

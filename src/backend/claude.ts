@@ -1,4 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import {
+	dbAppendMessage,
+	dbCreateSession,
+	dbGetSession,
+	dbListSessions,
+	dbUpdateMessageCount,
+	dbUpdateSession,
+} from './db';
 
 export type PermissionMode = 'allowEdits' | 'dangerouslySkipPermissions';
 
@@ -19,8 +27,6 @@ export interface Session {
 	permissionMode: PermissionMode;
 }
 
-const sessions = new Map<string, Session>();
-
 export function createSession(
 	model: ClaudeModel = 'haiku',
 	projectPath: string,
@@ -36,38 +42,37 @@ export function createSession(
 		projectPath,
 		permissionMode,
 	};
-	sessions.set(id, session);
+	dbCreateSession(session);
 	return session;
 }
 
 export function setSessionPermissionMode(id: string, mode: PermissionMode): Session | undefined {
-	const session = sessions.get(id);
+	const session = dbGetSession(id);
 	if (!session) return undefined;
+	dbUpdateSession(id, { permissionMode: mode });
 	session.permissionMode = mode;
 	return session;
 }
 
 export function getSession(id: string): Session | undefined {
-	return sessions.get(id);
+	return dbGetSession(id);
 }
 
 export function listSessions(projectPath?: string): Session[] {
-	const all = Array.from(sessions.values());
-	if (projectPath === undefined) return all;
-	return all.filter((s) => s.projectPath === projectPath);
+	return dbListSessions(projectPath);
 }
 
 export async function sendMessage(sessionId: string, message: string): Promise<string> {
-	const session = sessions.get(sessionId);
+	const session = dbGetSession(sessionId);
 	if (!session) throw new Error(`Session ${sessionId} not found`);
 
 	// Fake mode for E2E testing — avoids real Claude CLI calls
 	if (process.env.CLAUDE_TEST_FAKE === 'true') {
 		await new Promise((r) => setTimeout(r, 300));
-		session.messageCount++;
 		const echoResponse = `Echo: ${message.substring(0, 100)}`;
-		session.messages.push({ role: 'user', content: message });
-		session.messages.push({ role: 'assistant', content: echoResponse });
+		dbAppendMessage(sessionId, { role: 'user', content: message });
+		dbAppendMessage(sessionId, { role: 'assistant', content: echoResponse });
+		dbUpdateMessageCount(sessionId, session.messageCount + 2);
 		return echoResponse;
 	}
 
@@ -80,8 +85,9 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 		? ['--session-id', sessionId, '--model', session.model, ...permArgs, '--print', message]
 		: ['--resume', sessionId, ...permArgs, '--print', message];
 
-	session.messageCount++;
-	session.messages.push({ role: 'user', content: message });
+	// Write user message to DB before spawn (matches original optimistic behavior)
+	dbAppendMessage(sessionId, { role: 'user', content: message });
+	dbUpdateMessageCount(sessionId, session.messageCount + 1);
 
 	// CLAUDE_DIR overrides project path (keeps dev:test script working)
 	const cwd = process.env.CLAUDE_DIR ?? session.projectPath;
@@ -103,12 +109,11 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 	const exitCode = await proc.exited;
 
 	if (exitCode !== 0) {
-		// Roll back the user message we optimistically pushed
-		session.messages.pop();
+		// User message stays in DB — this is acceptable behavior (user did send that message)
 		throw new Error(`Claude exited with code ${exitCode}: ${errText.trim()}`);
 	}
 
 	const response = output.trim();
-	session.messages.push({ role: 'assistant', content: response });
+	dbAppendMessage(sessionId, { role: 'assistant', content: response });
 	return response;
 }
