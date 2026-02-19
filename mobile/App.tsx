@@ -11,10 +11,17 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import Constants from 'expo-constants';
 
-// Update this to your machine's local IP when running dev server
-// Run `bun dev` and look for the "Mobile HTTP API" line in the console
-const SERVER_URL = 'http://192.168.1.1:3001';
+// Auto-derive server host from the Expo dev server (same machine).
+// Falls back to localhost for simulators.
+function getServerUrl(): string {
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.manifest2?.extra?.expoClient?.hostUri;
+  const host = hostUri ? hostUri.split(':')[0] : 'localhost';
+  return `http://${host}:3001`;
+}
+
+const SERVER_URL = getServerUrl();
 
 type Message = {
   role: 'user' | 'assistant';
