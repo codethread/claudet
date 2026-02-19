@@ -3,35 +3,14 @@ import qrcode from 'qrcode-terminal';
 import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RealClaudeCodeService } from './services';
-import type { ClaudeCodeService } from './services/ClaudeCodeService';
 import { Server as Engine } from '@socket.io/bun-engine';
 import { Server } from 'socket.io';
 import { getLocalIP } from './utils/network';
-import {
-	initializeSessionManager,
-	getSessionManager,
-	getSessionReaders,
-} from './session/sessionInitializer';
-import { transcribeAudioFile } from './audio/transcription';
+import { createSession } from './claude';
 import { setupSocketHandlers } from './socket/handlers';
+import { transcribeAudioFile } from './audio/transcription';
 
-// Initialize with default production service
-initializeSessionManager(new RealClaudeCodeService());
-
-export interface StartServerOptions {
-	/**
-	 * Optional ClaudeCodeService for dependency injection (testing)
-	 */
-	service?: ClaudeCodeService;
-}
-
-export function startServer(options: StartServerOptions = {}) {
-	// If a custom service is provided, reinitialize the session manager
-	if (options.service) {
-		initializeSessionManager(options.service);
-	}
-
+export function startServer() {
 	// Check if certificates exist
 	if (!existsSync('./certs/localhost+3.pem') || !existsSync('./certs/localhost+3-key.pem')) {
 		console.error('\n❌ HTTPS certificates not found!');
@@ -41,22 +20,24 @@ export function startServer(options: StartServerOptions = {}) {
 		process.exit(1);
 	}
 
+	// Create a default session on startup
+	const defaultSession = createSession();
+	console.log(`🤖 Default Claude session created: ${defaultSession.id}`);
+
 	// Initialize Socket.IO with Bun engine
 	const io = new Server();
 	const engine = new Engine({ path: '/socket.io/' });
 	io.bind(engine);
 
-	// Setup Socket.IO event handlers
-	setupSocketHandlers(io, getSessionManager(), getSessionReaders());
+	setupSocketHandlers(io);
 
 	const server = Bun.serve({
 		// Integrate Socket.IO engine with Bun.serve first
 		...engine.handler(),
 
-		// Override with our specific settings
-		hostname: '0.0.0.0', // Listen on all network interfaces
+		hostname: '0.0.0.0',
 		port: 3000,
-		idleTimeout: 120, // 120 seconds to allow for longer Claude responses
+		idleTimeout: 120,
 		tls: {
 			cert: Bun.file('./certs/localhost+3.pem'),
 			key: Bun.file('./certs/localhost+3-key.pem'),
@@ -76,15 +57,14 @@ export function startServer(options: StartServerOptions = {}) {
 			'/assets/gen/icon-192.png': Bun.file('./src/frontend/assets/gen/icon-192.png'),
 			'/assets/gen/icon-512.png': Bun.file('./src/frontend/assets/gen/icon-512.png'),
 
-			// Serve index.html for all unmatched routes.
+			// Serve index.html for all unmatched routes
 			'/*': index,
 
 			'/api/models': {
 				async GET(_req) {
-					const { getDefaultModel } = await import('./services/ClaudeCodeService');
 					return Response.json({
 						models: ['haiku', 'sonnet'],
-						default: getDefaultModel(),
+						default: process.env.NODE_ENV === 'production' ? 'sonnet' : 'haiku',
 					});
 				},
 			},
@@ -94,7 +74,6 @@ export function startServer(options: StartServerOptions = {}) {
 					let tempAudioPath: string | null = null;
 
 					try {
-						// Parse FormData
 						const formData = await req.formData();
 						const audioFile = formData.get('audio') as File | null;
 
@@ -102,14 +81,12 @@ export function startServer(options: StartServerOptions = {}) {
 							return Response.json({ error: 'No audio file provided' }, { status: 400 });
 						}
 
-						// Save to temp file
 						const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 						const ext = audioFile.name.split('.').pop() || 'webm';
 						tempAudioPath = join('/tmp', `recording_${timestamp}.${ext}`);
 
 						await Bun.write(tempAudioPath, audioFile);
 
-						// Transcribe the audio
 						const transcription = await transcribeAudioFile(tempAudioPath);
 
 						return Response.json({ text: transcription });
@@ -122,7 +99,6 @@ export function startServer(options: StartServerOptions = {}) {
 							{ status: 500 },
 						);
 					} finally {
-						// Clean up temp audio file
 						if (tempAudioPath) {
 							await unlink(tempAudioPath).catch(() => {});
 						}
@@ -132,10 +108,7 @@ export function startServer(options: StartServerOptions = {}) {
 		},
 
 		development: process.env.NODE_ENV !== 'production' && {
-			// Enable browser hot reloading in development
 			hmr: true,
-
-			// Echo console logs from the browser to the server
 			console: true,
 		},
 	});
@@ -149,7 +122,6 @@ export function startServer(options: StartServerOptions = {}) {
 	console.log(`\n📍 Local:   ${server.url}`);
 	console.log(`📱 Network: https://${localIP}:${port}\n`);
 
-	// Generate QR code for the network URL
 	const networkURL = `https://${localIP}:${port}`;
 	console.log('📱 Scan QR code to open on your phone:\n');
 	qrcode.generate(networkURL, { small: true });

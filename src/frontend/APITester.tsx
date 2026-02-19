@@ -12,17 +12,8 @@ import { useSocket } from './hooks/useSocket';
 import type { Socket } from 'socket.io-client';
 
 export function APITester() {
-	// Socket.IO connection (handles reconnection automatically)
 	const { socket, connected } = useSocket({ url: '/' });
 
-	const _messageInputRef = useRef<HTMLTextAreaElement>(null);
-	const _chatContainerRef = useRef<HTMLDivElement>(null);
-	const [_leftSidebarOpen, _setLeftSidebarOpen] = useState(false);
-	const [_rightSidebarOpen, _setRightSidebarOpen] = useState(false);
-	const [_isUserScrolled, _setIsUserScrolled] = useState(false);
-
-	// Wait for socket to be available before creating machine
-	// This ensures we don't render the chat UI before socket is ready
 	if (!socket) {
 		return (
 			<div className="h-full w-full flex items-center justify-center">
@@ -47,69 +38,47 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 	const messageInputRef = useRef<HTMLTextAreaElement>(null);
 	const chatContainerRef = useRef<HTMLDivElement>(null);
 	const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
-	const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
 	const [isUserScrolled, setIsUserScrolled] = useState(false);
 
 	// Setup Socket.IO event listeners
 	useEffect(() => {
-		// Connection established
 		const handleConnect = () => {
-			console.log('[socket] Connected');
 			send({ type: 'WEBSOCKET_CONNECTED' });
 		};
 
-		// Connection lost
 		const handleDisconnect = () => {
-			console.log('[socket] Disconnected');
 			send({ type: 'WEBSOCKET_DISCONNECTED' });
 		};
 
-		// Connection message (includes session list)
 		const handleConnectionMessage = (data: unknown) => {
-			console.log('[socket] Connection message received:', data);
 			send({ type: 'WEBSOCKET_MESSAGE', data: JSON.stringify(data) });
 		};
 
-		// Log message
-		const handleLog = (data: unknown) => {
-			console.log('[socket] Log message received:', data);
-			send({ type: 'WEBSOCKET_MESSAGE', data: JSON.stringify(data) });
-		};
-
-		// Error
 		const handleError = (err: Error) => {
-			// Suppress error logging in test/automation environments
 			if (!navigator.webdriver) {
 				console.error('[socket] Error:', err);
 			}
 			send({ type: 'WEBSOCKET_ERROR', error: err.message });
 		};
 
-		// Register event listeners
 		socket.on('connect', handleConnect);
 		socket.on('disconnect', handleDisconnect);
 		socket.on('connection', handleConnectionMessage);
-		socket.on('log', handleLog);
 		socket.on('connect_error', handleError);
 
-		// Check if already connected when effect runs (handle race condition)
-		// Note: This may run multiple times in dev mode (React Strict Mode)
 		if (socket.connected) {
 			send({ type: 'WEBSOCKET_CONNECTED' });
 		}
 
-		// Expose socket to window for E2E testing
 		if (navigator.webdriver) {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(window as any).__socket = socket;
 		}
 
-		// Clean up on unmount
 		return () => {
 			socket.off('connect', handleConnect);
 			socket.off('disconnect', handleDisconnect);
 			socket.off('connection', handleConnectionMessage);
-			socket.off('log', handleLog);
 			socket.off('connect_error', handleError);
 		};
 	}, [socket, send]);
@@ -118,13 +87,10 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 		e.preventDefault();
 
 		const message = messageInputRef.current!.value;
-		if (!message.trim()) {
-			return;
-		}
+		if (!message.trim()) return;
 
 		send({ type: 'SEND_MESSAGE', message });
 		messageInputRef.current!.value = '';
-		// Reset textarea height after sending
 		messageInputRef.current!.style.height = 'auto';
 	};
 
@@ -132,67 +98,25 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 		const input = messageInputRef.current;
 		if (!input) return;
 
-		// Get current cursor position
 		const start = input.selectionStart || 0;
 		const end = input.selectionEnd || 0;
-		const currentValue = input.value;
-
-		// Insert text at cursor position
-		const newValue = currentValue.substring(0, start) + text + currentValue.substring(end);
+		const newValue = input.value.substring(0, start) + text + input.value.substring(end);
 		input.value = newValue;
 
-		// Set cursor position after inserted text
 		const newCursorPos = start + text.length;
 		input.setSelectionRange(newCursorPos, newCursorPos);
-
-		// Focus the input
 		input.focus();
 	};
 
-	const {
-		sessionChatHistories,
-		currentSessionId,
-		selectedMessageIndex,
-		currentLogs,
-		sessions,
-		selectedModel,
-	} = state.context;
-	const _isIdle = state.matches('idle');
+	const { sessionChatHistories, currentSessionId, sessions, selectedModel } = state.context;
 	const isSending = state.matches('sending');
 	const isReconnecting = state.matches('reconnecting') || !connected;
 	const isLoading = isSending;
 
-	// Memoize chatHistory to prevent unnecessary re-renders
 	const chatHistory = useMemo(
 		() => (currentSessionId ? sessionChatHistories.get(currentSessionId) || [] : []),
 		[currentSessionId, sessionChatHistories],
 	);
-
-	const selectedMessage = selectedMessageIndex !== null ? chatHistory[selectedMessageIndex] : null;
-	const _currentSession = sessions.find((s) => s.id === currentSessionId);
-
-	// Debug logging - only log when sessionChatHistories actually changes
-	useEffect(() => {
-		console.log('[APITester] === State Debug ===');
-		console.log('[APITester] currentSessionId:', currentSessionId);
-		console.log('[APITester] sessions:', sessions);
-		console.log('[APITester] sessionChatHistories keys:', Array.from(sessionChatHistories.keys()));
-		console.log('[APITester] sessionChatHistories full contents:');
-		sessionChatHistories.forEach((history, sessionId) => {
-			console.log(`  Session ${sessionId.substring(0, 8)}: ${history.length} messages`);
-			history.forEach((msg, idx) => {
-				console.log(`    [${idx}] ${msg.role}: ${msg.content.substring(0, 50)}...`);
-			});
-		});
-		console.log('[APITester] ==================');
-	}, [currentSessionId, sessions, sessionChatHistories]);
-
-	// Open right sidebar when message is selected
-	useEffect(() => {
-		if (selectedMessage) {
-			setRightSidebarOpen(true);
-		}
-	}, [selectedMessage]);
 
 	// Auto-resize textarea as user types
 	useEffect(() => {
@@ -333,19 +257,16 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 								variant="outline"
 								size="sm"
 								onClick={async () => {
-									// Unregister service worker
 									if ('serviceWorker' in navigator) {
 										const registrations = await navigator.serviceWorker.getRegistrations();
 										for (const registration of registrations) {
 											await registration.unregister();
 										}
 									}
-									// Clear all caches
 									if ('caches' in window) {
 										const cacheNames = await caches.keys();
 										await Promise.all(cacheNames.map((name) => caches.delete(name)));
 									}
-									// Hard reload
 									window.location.reload();
 								}}
 								className="w-full"
@@ -353,57 +274,6 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 								Force Refresh (Clear Cache)
 							</Button>
 						</div>
-					</div>
-				</SheetContent>
-			</Sheet>
-
-			{/* Right Sidebar - Logs */}
-			<Sheet
-				open={rightSidebarOpen}
-				onOpenChange={(open) => {
-					setRightSidebarOpen(open);
-					if (!open) {
-						send({ type: 'DESELECT_MESSAGE' });
-					}
-				}}
-			>
-				<SheetContent side="right" className="w-full sm:w-[400px]">
-					<SheetHeader>
-						<SheetTitle>Message Logs</SheetTitle>
-					</SheetHeader>
-					<div className="mt-6 bg-card border border-input rounded-xl p-4 h-[calc(100vh-180px)] overflow-y-auto font-mono text-xs">
-						{!selectedMessage?.logs || selectedMessage.logs.length === 0 ? (
-							<p className="text-muted-foreground">No logs available</p>
-						) : (
-							<div className="flex flex-col gap-2">
-								{selectedMessage.logs.map((log, i) => {
-									const logKey = `${i}-${log.substring(0, 50)}`;
-									try {
-										const parsed = JSON.parse(log);
-										return (
-											<div key={logKey} className="border-l-2 border-primary/30 pl-2">
-												<div className="text-primary/60 text-[10px] mb-1">
-													{parsed.type || 'unknown'}
-													{parsed.subtype ? ` (${parsed.subtype})` : ''}
-												</div>
-												<pre className="text-muted-foreground overflow-x-auto whitespace-pre">
-													{JSON.stringify(parsed, null, 2)}
-												</pre>
-											</div>
-										);
-									} catch {
-										return (
-											<div
-												key={logKey}
-												className="text-muted-foreground overflow-x-auto whitespace-pre"
-											>
-												{log}
-											</div>
-										);
-									}
-								})}
-							</div>
-						)}
 					</div>
 				</SheetContent>
 			</Sheet>
@@ -440,39 +310,17 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 					) : (
 						<div className="flex flex-col gap-4 max-w-4xl mx-auto">
 							{chatHistory.map((msg, i) => {
-								const isInteractive = msg.role === 'assistant' && msg.logs;
 								const msgKey = `${i}-${msg.role}-${msg.content.substring(0, 30)}`;
 								return (
 									<div
 										key={msgKey}
-										{...(isInteractive && {
-											onClick: () => send({ type: 'SELECT_MESSAGE', index: i }),
-											onKeyDown: (e: React.KeyboardEvent) => {
-												if (e.key === 'Enter' || e.key === ' ') {
-													e.preventDefault();
-													send({ type: 'SELECT_MESSAGE', index: i });
-												}
-											},
-											role: 'button',
-											tabIndex: 0,
-										})}
 										className={cn(
 											'p-4 rounded-xl',
 											msg.role === 'user' ? 'bg-primary/10 ml-8' : 'bg-muted mr-8',
-											isInteractive &&
-												'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all',
-											selectedMessageIndex === i && 'ring-2 ring-primary',
 										)}
 									>
-										<div className="flex items-center justify-between mb-2">
-											<div className="text-xs font-semibold text-muted-foreground">
-												{msg.role === 'user' ? 'You' : 'Claude'}
-											</div>
-											{msg.role === 'assistant' && msg.logs && (
-												<div className="text-[10px] text-muted-foreground">
-													{msg.logs.length} logs • click to view
-												</div>
-											)}
+										<div className="text-xs font-semibold mb-2 text-muted-foreground">
+											{msg.role === 'user' ? 'You' : 'Claude'}
 										</div>
 										<MarkdownMessage content={msg.content} />
 									</div>
@@ -482,11 +330,6 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 								<div className="p-4 rounded-xl bg-muted mr-8">
 									<div className="text-xs font-semibold mb-2 text-muted-foreground">Claude</div>
 									<div className="text-sm text-muted-foreground">Thinking...</div>
-									{currentLogs.length > 0 && (
-										<div className="text-[10px] text-muted-foreground mt-2">
-											{currentLogs.length} logs captured
-										</div>
-									)}
 								</div>
 							)}
 						</div>
@@ -507,9 +350,7 @@ function APITesterContent({ socket, connected }: { socket: Socket; connected: bo
 								if (e.key === 'Enter' && !e.shiftKey) {
 									e.preventDefault();
 									const form = e.currentTarget.form;
-									if (form) {
-										form.requestSubmit();
-									}
+									if (form) form.requestSubmit();
 								}
 							}}
 						/>

@@ -7,7 +7,6 @@ import type { Session, ServerMessage } from '../shared/messages';
 export const MessageSchema = z.object({
 	role: z.enum(['user', 'assistant']),
 	content: z.string(),
-	logs: z.array(z.string()).optional(),
 });
 
 // TypeScript types inferred from Zod schemas
@@ -22,8 +21,6 @@ export interface ChatMachineContext {
 	sessions: Session[];
 	currentSessionId: string | null;
 	sessionChatHistories: Map<string, Message[]>;
-	selectedMessageIndex: number | null;
-	currentLogs: string[];
 	selectedModel: string;
 	error: string | null;
 	reconnectAttempts: number;
@@ -38,8 +35,6 @@ export type ChatMachineEvent =
 	| { type: 'WEBSOCKET_MESSAGE'; data: string }
 	| { type: 'SEND_MESSAGE'; message: string }
 	| { type: 'MESSAGE_ERROR'; error: string }
-	| { type: 'SELECT_MESSAGE'; index: number }
-	| { type: 'DESELECT_MESSAGE' }
 	| { type: 'CLEAR_ERROR' }
 	| { type: 'SELECT_MODEL'; model: string }
 	| { type: 'CREATE_SESSION' }
@@ -57,7 +52,6 @@ export interface SendMessageInput {
 // Actor output for sending messages
 export interface SendMessageOutput {
 	response: string;
-	logs: string[];
 	sessionId: string;
 }
 
@@ -66,12 +60,8 @@ const sendMessageActor = fromPromise<SendMessageOutput, SendMessageInput>(async 
 	const { socket, message, sessionId } = input;
 	const requestId = crypto.randomUUID();
 
-	console.log('[sendMessage] Emitting chat:send with requestId:', requestId);
-
 	return new Promise<SendMessageOutput>((resolve, reject) => {
-		// Set up response listener
 		const handleResponse = (data: unknown) => {
-			console.log('[sendMessage] Received chat:response:', data);
 			try {
 				const msg = data as ServerMessage;
 				if (msg.type === 'chat:response' && msg.payload.requestId === requestId) {
@@ -79,7 +69,6 @@ const sendMessageActor = fromPromise<SendMessageOutput, SendMessageInput>(async 
 					socket.off('chat:error', handleError);
 					resolve({
 						response: msg.payload.response,
-						logs: msg.payload.logs,
 						sessionId: msg.payload.sessionId,
 					});
 				}
@@ -89,7 +78,6 @@ const sendMessageActor = fromPromise<SendMessageOutput, SendMessageInput>(async 
 		};
 
 		const handleError = (data: unknown) => {
-			console.log('[sendMessage] Received chat:error:', data);
 			try {
 				const msg = data as ServerMessage;
 				if (msg.type === 'chat:error' && msg.payload.requestId === requestId) {
@@ -105,19 +93,14 @@ const sendMessageActor = fromPromise<SendMessageOutput, SendMessageInput>(async 
 		socket.on('chat:response', handleResponse);
 		socket.on('chat:error', handleError);
 
-		// Emit the message
-		socket.emit('chat:send', {
-			message,
-			sessionId,
-			requestId,
-		});
+		socket.emit('chat:send', { message, sessionId, requestId });
 
-		// Timeout after 60 seconds
+		// Timeout after 120 seconds (claude --print can take a while)
 		setTimeout(() => {
 			socket.off('chat:response', handleResponse);
 			socket.off('chat:error', handleError);
 			reject(new Error('Request timeout'));
-		}, 60000);
+		}, 120000);
 	});
 });
 
@@ -132,12 +115,8 @@ const createSessionActor = fromPromise<Session, CreateSessionInput>(async ({ inp
 	const { socket, model } = input;
 	const requestId = crypto.randomUUID();
 
-	console.log('[createSession] Emitting session:create with requestId:', requestId);
-
 	return new Promise<Session>((resolve, reject) => {
-		// Set up response listener
 		const handleCreated = (data: unknown) => {
-			console.log('[createSession] Received session:created:', data);
 			try {
 				const msg = data as ServerMessage;
 				if (msg.type === 'session:created' && msg.payload.requestId === requestId) {
@@ -155,7 +134,6 @@ const createSessionActor = fromPromise<Session, CreateSessionInput>(async ({ inp
 		};
 
 		const handleError = (data: unknown) => {
-			console.log('[createSession] Received session:error:', data);
 			try {
 				const msg = data as ServerMessage;
 				if (msg.type === 'session:error' && msg.payload.requestId === requestId) {
@@ -171,13 +149,8 @@ const createSessionActor = fromPromise<Session, CreateSessionInput>(async ({ inp
 		socket.on('session:created', handleCreated);
 		socket.on('session:error', handleError);
 
-		// Emit the request
-		socket.emit('session:create', {
-			model,
-			requestId,
-		});
+		socket.emit('session:create', { model, requestId });
 
-		// Timeout after 30 seconds
 		setTimeout(() => {
 			socket.off('session:created', handleCreated);
 			socket.off('session:error', handleError);
@@ -196,12 +169,8 @@ const loadSessionsActor = fromPromise<Session[], LoadSessionsInput>(async ({ inp
 	const { socket } = input;
 	const requestId = crypto.randomUUID();
 
-	console.log('[loadSessions] Emitting session:list with requestId:', requestId);
-
 	return new Promise<Session[]>((resolve, reject) => {
-		// Set up response listener
 		const handleList = (data: unknown) => {
-			console.log('[loadSessions] Received session:list:', data);
 			try {
 				const msg = data as ServerMessage;
 				if (msg.type === 'session:list' && msg.payload.requestId === requestId) {
@@ -215,7 +184,6 @@ const loadSessionsActor = fromPromise<Session[], LoadSessionsInput>(async ({ inp
 		};
 
 		const handleError = (data: unknown) => {
-			console.log('[loadSessions] Received session:error:', data);
 			try {
 				const msg = data as ServerMessage;
 				if (msg.type === 'session:error' && msg.payload.requestId === requestId) {
@@ -231,12 +199,8 @@ const loadSessionsActor = fromPromise<Session[], LoadSessionsInput>(async ({ inp
 		socket.on('session:list', handleList);
 		socket.on('session:error', handleError);
 
-		// Emit the request
-		socket.emit('session:list', {
-			requestId,
-		});
+		socket.emit('session:list', { requestId });
 
-		// Timeout after 30 seconds
 		setTimeout(() => {
 			socket.off('session:list', handleList);
 			socket.off('session:error', handleError);
@@ -264,8 +228,6 @@ export const chatMachine = setup({
 		sessions: [],
 		currentSessionId: null,
 		sessionChatHistories: new Map(),
-		selectedMessageIndex: null,
-		currentLogs: [],
 		selectedModel: 'haiku',
 		error: null,
 		reconnectAttempts: 0,
@@ -275,24 +237,17 @@ export const chatMachine = setup({
 			on: {
 				WEBSOCKET_CONNECTED: {
 					target: 'idle',
-					actions: assign({
-						error: null,
-						reconnectAttempts: 0,
-					}),
+					actions: assign({ error: null, reconnectAttempts: 0 }),
 				},
 				WEBSOCKET_RECONNECTING: {
 					target: 'reconnecting',
-					actions: assign({
-						reconnectAttempts: ({ event }) => event.attempts,
-					}),
+					actions: assign({ reconnectAttempts: ({ event }) => event.attempts }),
 				},
 				WEBSOCKET_MESSAGE: {
 					actions: assign({
 						sessions: ({ context, event }) => {
 							try {
 								const msg = JSON.parse(event.data) as ServerMessage;
-
-								// If connection message includes sessions, update sessions
 								if (msg.type === 'connection' && msg.payload.sessions) {
 									return msg.payload.sessions;
 								}
@@ -304,15 +259,9 @@ export const chatMachine = setup({
 						currentSessionId: ({ context, event }) => {
 							try {
 								const msg = JSON.parse(event.data) as ServerMessage;
-
-								// If connection message includes sessions, set current session
 								if (msg.type === 'connection' && msg.payload.sessions) {
-									// Set current session to first available if not set
 									if (!context.currentSessionId && msg.payload.sessions.length > 0) {
-										const firstSession = msg.payload.sessions[0];
-										if (firstSession) {
-											return firstSession.id;
-										}
+										return msg.payload.sessions[0]!.id;
 									}
 								}
 							} catch (e) {
@@ -326,21 +275,15 @@ export const chatMachine = setup({
 					actions: assign({
 						sessions: ({ event }) => event.sessions,
 						currentSessionId: ({ context, event }) => {
-							// Set current session to first available if not set
 							if (!context.currentSessionId && event.sessions.length > 0) {
-								const firstSession = event.sessions[0];
-								if (firstSession) {
-									return firstSession.id;
-								}
+								return event.sessions[0]!.id;
 							}
 							return context.currentSessionId;
 						},
 					}),
 				},
 				WEBSOCKET_ERROR: {
-					actions: assign({
-						error: ({ event }) => event.error,
-					}),
+					actions: assign({ error: ({ event }) => event.error }),
 				},
 			},
 		},
@@ -348,20 +291,13 @@ export const chatMachine = setup({
 			on: {
 				WEBSOCKET_CONNECTED: {
 					target: 'idle',
-					actions: assign({
-						error: null,
-						reconnectAttempts: 0,
-					}),
+					actions: assign({ error: null, reconnectAttempts: 0 }),
 				},
 				WEBSOCKET_RECONNECTING: {
-					actions: assign({
-						reconnectAttempts: ({ event }) => event.attempts,
-					}),
+					actions: assign({ reconnectAttempts: ({ event }) => event.attempts }),
 				},
 				WEBSOCKET_ERROR: {
-					actions: assign({
-						error: ({ event }) => event.error,
-					}),
+					actions: assign({ error: ({ event }) => event.error }),
 				},
 			},
 		},
@@ -369,97 +305,60 @@ export const chatMachine = setup({
 			on: {
 				SEND_MESSAGE: {
 					target: 'sending',
-					actions: [
-						assign({
-							currentLogs: [],
-							error: null,
-							sessionChatHistories: ({ context, event }) => {
-								const sessionId = context.currentSessionId;
-								console.log('[chatMachine] SEND_MESSAGE - currentSessionId:', sessionId);
-								if (!sessionId) {
-									console.warn('[chatMachine] No currentSessionId, not storing user message');
-									return context.sessionChatHistories;
-								}
-
-								const history = context.sessionChatHistories.get(sessionId) || [];
-								const updated = new Map(context.sessionChatHistories);
-								updated.set(sessionId, [
-									...history,
-									{ role: 'user' as const, content: event.message },
-								]);
-								console.log('[chatMachine] Stored user message under session:', sessionId);
-								return updated;
-							},
-						}),
-					],
+					actions: assign({
+						error: null,
+						sessionChatHistories: ({ context, event }) => {
+							const sessionId = context.currentSessionId;
+							if (!sessionId) return context.sessionChatHistories;
+							const history = context.sessionChatHistories.get(sessionId) || [];
+							const updated = new Map(context.sessionChatHistories);
+							updated.set(sessionId, [...history, { role: 'user' as const, content: event.message }]);
+							return updated;
+						},
+					}),
 				},
 				SELECT_MODEL: {
-					actions: assign({
-						selectedModel: ({ event }) => event.model,
-					}),
+					actions: assign({ selectedModel: ({ event }) => event.model }),
 				},
 				CREATE_SESSION: {
 					target: 'creatingSession',
 				},
 				SWITCH_SESSION: {
-					actions: assign({
-						currentSessionId: ({ event }) => event.sessionId,
-						selectedMessageIndex: null,
-					}),
+					actions: assign({ currentSessionId: ({ event }) => event.sessionId }),
 				},
 				WEBSOCKET_DISCONNECTED: {
 					target: 'reconnecting',
 				},
 				WEBSOCKET_RECONNECTING: {
 					target: 'reconnecting',
-					actions: assign({
-						reconnectAttempts: ({ event }) => event.attempts,
-					}),
+					actions: assign({ reconnectAttempts: ({ event }) => event.attempts }),
 				},
 				WEBSOCKET_ERROR: {
-					actions: assign({
-						error: ({ event }) => event.error,
-					}),
+					actions: assign({ error: ({ event }) => event.error }),
 				},
 				WEBSOCKET_MESSAGE: {
 					actions: assign({
 						sessions: ({ context, event }) => {
 							try {
 								const msg = JSON.parse(event.data) as ServerMessage;
-
-								// If connection message includes sessions, update sessions
 								if (msg.type === 'connection' && msg.payload.sessions) {
-									console.log(
-										'[chatMachine] WEBSOCKET_MESSAGE - connection with sessions:',
-										msg.payload.sessions,
-									);
 									return msg.payload.sessions;
 								}
 							} catch (_e) {
-								// Ignore parse errors (could be log messages)
+								// ignore
 							}
 							return context.sessions;
 						},
 						currentSessionId: ({ context, event }) => {
 							try {
 								const msg = JSON.parse(event.data) as ServerMessage;
-
-								// If connection message includes sessions, set current session
 								if (msg.type === 'connection' && msg.payload.sessions) {
-									// Set current session to first available if not set
 									if (!context.currentSessionId && msg.payload.sessions.length > 0) {
-										const firstSession = msg.payload.sessions[0];
-										if (firstSession) {
-											console.log(
-												'[chatMachine] WEBSOCKET_MESSAGE - Setting currentSessionId to:',
-												firstSession.id,
-											);
-											return firstSession.id;
-										}
+										return msg.payload.sessions[0]!.id;
 									}
 								}
 							} catch (_e) {
-								// Ignore parse errors (could be log messages)
+								// ignore
 							}
 							return context.currentSessionId;
 						},
@@ -467,38 +366,13 @@ export const chatMachine = setup({
 				},
 				SESSIONS_LOADED: {
 					actions: assign({
-						sessions: ({ event }) => {
-							console.log('[chatMachine] SESSIONS_LOADED:', event.sessions);
-							return event.sessions;
-						},
+						sessions: ({ event }) => event.sessions,
 						currentSessionId: ({ context, event }) => {
-							// Set current session to first available if not set
 							if (!context.currentSessionId && event.sessions.length > 0) {
-								const firstSession = event.sessions[0];
-								if (firstSession) {
-									console.log(
-										'[chatMachine] SESSIONS_LOADED - Setting currentSessionId to:',
-										firstSession.id,
-									);
-									return firstSession.id;
-								}
+								return event.sessions[0]!.id;
 							}
-							console.log(
-								'[chatMachine] SESSIONS_LOADED - Keeping currentSessionId as:',
-								context.currentSessionId,
-							);
 							return context.currentSessionId;
 						},
-					}),
-				},
-				SELECT_MESSAGE: {
-					actions: assign({
-						selectedMessageIndex: ({ event }) => event.index,
-					}),
-				},
-				DESELECT_MESSAGE: {
-					actions: assign({
-						selectedMessageIndex: null,
 					}),
 				},
 			},
@@ -508,22 +382,15 @@ export const chatMachine = setup({
 				id: 'createSession',
 				src: 'createSession',
 				input: ({ context }) => {
-					if (!context.socket) {
-						throw new Error('Socket not available');
-					}
-					return {
-						socket: context.socket,
-						model: context.selectedModel,
-					};
+					if (!context.socket) throw new Error('Socket not available');
+					return { socket: context.socket, model: context.selectedModel };
 				},
 				onDone: {
 					target: 'idle',
-					actions: [
-						assign({
-							sessions: ({ context, event }) => [...context.sessions, event.output],
-							currentSessionId: ({ event }) => event.output.id,
-						}),
-					],
+					actions: assign({
+						sessions: ({ context, event }) => [...context.sessions, event.output],
+						currentSessionId: ({ event }) => event.output.id,
+					}),
 				},
 				onError: {
 					target: 'idle',
@@ -538,15 +405,9 @@ export const chatMachine = setup({
 				id: 'sendMessage',
 				src: 'sendMessage',
 				input: ({ context, event }) => {
-					if (event.type !== 'SEND_MESSAGE') {
-						throw new Error('Invalid event type');
-					}
-					if (!context.socket) {
-						throw new Error('Socket not available');
-					}
-					if (!context.currentSessionId) {
-						throw new Error('No current session');
-					}
+					if (event.type !== 'SEND_MESSAGE') throw new Error('Invalid event type');
+					if (!context.socket) throw new Error('Socket not available');
+					if (!context.currentSessionId) throw new Error('No current session');
 					return {
 						socket: context.socket,
 						message: event.message,
@@ -555,100 +416,46 @@ export const chatMachine = setup({
 				},
 				onDone: {
 					target: 'idle',
-					actions: [
-						assign({
-							sessionChatHistories: ({ context, event }) => {
-								// Always use current session ID, not the one from API response
-								const sessionId = context.currentSessionId;
-								console.log('[chatMachine] onDone - currentSessionId:', sessionId);
-								console.log(
-									'[chatMachine] onDone - API returned sessionId:',
-									event.output.sessionId,
-								);
-								if (!sessionId) return context.sessionChatHistories;
-
-								const history = context.sessionChatHistories.get(sessionId) || [];
-								const updated = new Map(context.sessionChatHistories);
-								updated.set(sessionId, [
-									...history,
-									{
-										role: 'assistant' as const,
-										content: event.output.response,
-										logs: event.output.logs || [],
-									},
-								]);
-								console.log('[chatMachine] Stored assistant message under session:', sessionId);
-								console.log(
-									'[chatMachine] Updated history length:',
-									updated.get(sessionId)?.length,
-								);
-								return updated;
-							},
-							currentLogs: [],
-						}),
-					],
-				},
-				onError: {
-					target: 'idle',
-					actions: [
-						assign({
-							sessionChatHistories: ({ context, event }) => {
-								const sessionId = context.currentSessionId;
-								if (!sessionId) return context.sessionChatHistories;
-
-								const history = context.sessionChatHistories.get(sessionId) || [];
-								const updated = new Map(context.sessionChatHistories);
-								updated.set(sessionId, [
-									...history,
-									{
-										role: 'assistant' as const,
-										content: `Error: ${event.error}`,
-										logs: [],
-									},
-								]);
-								return updated;
-							},
-							currentLogs: [],
-							error: ({ event }) => String(event.error),
-						}),
-					],
-				},
-			},
-			on: {
-				WEBSOCKET_MESSAGE: {
 					actions: assign({
-						currentLogs: ({ context, event }) => {
-							try {
-								const msg = JSON.parse(event.data) as ServerMessage;
-
-								// Only add logs for the current session
-								if (
-									msg.type === 'log' &&
-									msg.payload.sessionId === context.currentSessionId &&
-									msg.payload.data
-								) {
-									return [...context.currentLogs, msg.payload.data];
-								}
-								return context.currentLogs;
-							} catch {
-								return context.currentLogs;
-							}
+						sessionChatHistories: ({ context, event }) => {
+							const sessionId = context.currentSessionId;
+							if (!sessionId) return context.sessionChatHistories;
+							const history = context.sessionChatHistories.get(sessionId) || [];
+							const updated = new Map(context.sessionChatHistories);
+							updated.set(sessionId, [
+								...history,
+								{ role: 'assistant' as const, content: event.output.response },
+							]);
+							return updated;
 						},
 					}),
 				},
-				WEBSOCKET_DISCONNECTED: {
-					target: 'reconnecting',
+				onError: {
+					target: 'idle',
+					actions: assign({
+						sessionChatHistories: ({ context, event }) => {
+							const sessionId = context.currentSessionId;
+							if (!sessionId) return context.sessionChatHistories;
+							const history = context.sessionChatHistories.get(sessionId) || [];
+							const updated = new Map(context.sessionChatHistories);
+							updated.set(sessionId, [
+								...history,
+								{ role: 'assistant' as const, content: `Error: ${event.error}` },
+							]);
+							return updated;
+						},
+						error: ({ event }) => String(event.error),
+					}),
 				},
+			},
+			on: {
+				WEBSOCKET_DISCONNECTED: { target: 'reconnecting' },
 				WEBSOCKET_RECONNECTING: {
 					target: 'reconnecting',
-					actions: assign({
-						reconnectAttempts: ({ event }) => event.attempts,
-					}),
+					actions: assign({ reconnectAttempts: ({ event }) => event.attempts }),
 				},
 				WEBSOCKET_ERROR: {
-					actions: assign({
-						error: ({ event }) => event.error,
-					}),
+					actions: assign({ error: ({ event }) => event.error }),
 				},
 			},
 		},

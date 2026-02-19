@@ -1,8 +1,7 @@
-import { startServer } from './server';
-import { FakeClaudeCodeService } from './services/FakeClaudeCodeService';
+// Enable fake mode before importing server — avoids real Claude CLI calls in E2E tests
+process.env.CLAUDE_TEST_FAKE = 'true';
 
-// Start the server with fake Claude service for E2E tests
-console.log('🧪 Starting test server with FakeClaudeCodeService...');
-startServer({
-	service: new FakeClaudeCodeService(),
-});
+import { startServer } from './server';
+
+console.log('🧪 Starting test server with fake Claude responses...');
+startServer();

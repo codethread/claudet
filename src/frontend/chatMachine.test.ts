@@ -20,33 +20,28 @@ function createMockSocket(): Socket {
 		id: 'mock-socket-id',
 	};
 
-	// Type-safe mock implementations that match Socket.IO's signatures
 	mockSocket.emit = function (this: Socket) {
 		return this;
 	};
 
 	mockSocket.on = function (this: Socket, ev?: string, listener?: (...args: any[]) => void) {
-		// Handle case where on() is called without arguments (for method chaining)
 		if (ev === undefined || listener === undefined) {
 			return this;
 		}
-		// Implementation will be overridden in tests that need specific behavior
 		return this;
 	};
 
 	mockSocket.off = function (this: Socket, ev?: string, listener?: (...args: any[]) => void) {
-		// Handle case where off() is called without arguments (removes all listeners)
 		if (ev === undefined) {
 			return this;
 		}
-		// Implementation will be overridden in tests that need specific behavior
 		return this;
 	};
 
 	return mockSocket as Socket;
 }
 
-// Helper to create a test actor with optional initial context and delay
+// Helper to create a test actor with optional delay
 function createTestActor(_initialContext?: Partial<ChatMachineContext>, delay: number = 0) {
 	const mockSocket = createMockSocket();
 
@@ -58,7 +53,6 @@ function createTestActor(_initialContext?: Partial<ChatMachineContext>, delay: n
 				}
 				return {
 					response: `Echo: ${input.message}`,
-					logs: ['log1', 'log2'],
 					sessionId: input.sessionId,
 				};
 			}),
@@ -66,9 +60,7 @@ function createTestActor(_initialContext?: Partial<ChatMachineContext>, delay: n
 	});
 
 	const actor = createActor(machine, {
-		input: {
-			socket: mockSocket,
-		},
+		input: { socket: mockSocket },
 	});
 	actor.start();
 
@@ -88,9 +80,7 @@ function createErrorActor(errorMessage: string) {
 	});
 
 	const actor = createActor(machine, {
-		input: {
-			socket: mockSocket,
-		},
+		input: { socket: mockSocket },
 	});
 	actor.start();
 
@@ -107,8 +97,6 @@ describe('chatMachine', () => {
 			expect(context.sessions).toHaveLength(0);
 			expect(context.currentSessionId).toBe(null);
 			expect(context.sessionChatHistories.size).toBe(0);
-			expect(context.selectedMessageIndex).toBe(null);
-			expect(context.currentLogs).toEqual([]);
 			expect(context.error).toBe(null);
 
 			actor.stop();
@@ -154,71 +142,14 @@ describe('chatMachine', () => {
 		}>)('$name', async ({ initialState, event, expectedState, expectedError }) => {
 			const actor = createTestActor();
 
-			// Navigate to initial state
 			if (initialState === 'idle') {
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
 			}
 
-			// Send event
 			actor.send(event);
 
 			expect(actor.getSnapshot().value).toBe(expectedState);
 			expect(actor.getSnapshot().context.error).toBe(expectedError);
-
-			actor.stop();
-		});
-	});
-
-	describe('message selection', () => {
-		test.each([
-			{
-				name: 'should select message by index',
-				initialContext: {
-					sessionChatHistories: new Map([
-						[
-							TEST_SESSION_ID,
-							[
-								{ role: 'user' as const, content: 'Hello' },
-								{ role: 'assistant' as const, content: 'Hi', logs: ['log'] },
-							],
-						],
-					]),
-				},
-				event: { type: 'SELECT_MESSAGE', index: 1 } as const,
-				expectedSelectedIndex: 1,
-			},
-			{
-				name: 'should deselect message',
-				initialContext: {
-					sessionChatHistories: new Map([
-						[
-							TEST_SESSION_ID,
-							[
-								{ role: 'user' as const, content: 'Hello' },
-								{ role: 'assistant' as const, content: 'Hi', logs: ['log'] },
-							],
-						],
-					]),
-					selectedMessageIndex: 1,
-				},
-				event: { type: 'DESELECT_MESSAGE' } as const,
-				expectedSelectedIndex: null,
-			},
-		] satisfies Array<{
-			name: string;
-			initialContext: Partial<ChatMachineContext>;
-			event: ChatMachineEvent;
-			expectedSelectedIndex: number | null;
-		}>)('$name', ({ initialContext, event, expectedSelectedIndex }) => {
-			const actor = createTestActor(initialContext);
-
-			// Navigate to idle state
-			actor.send({ type: 'WEBSOCKET_CONNECTED' });
-
-			// Send selection event
-			actor.send(event);
-
-			expect(actor.getSnapshot().context.selectedMessageIndex).toBe(expectedSelectedIndex);
 
 			actor.stop();
 		});
@@ -231,7 +162,6 @@ describe('chatMachine', () => {
 			actor.send({ type: 'WEBSOCKET_CONNECTED' });
 			expect(actor.getSnapshot().value).toBe('idle');
 
-			// Initialize sessions first
 			actor.send({
 				type: 'SESSIONS_LOADED',
 				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
@@ -240,7 +170,6 @@ describe('chatMachine', () => {
 			actor.send({ type: 'SEND_MESSAGE', message: 'Test message' });
 			expect(actor.getSnapshot().value).toBe('sending');
 
-			// Wait for the async operation to complete
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			expect(actor.getSnapshot().value).toBe('idle');
@@ -253,7 +182,6 @@ describe('chatMachine', () => {
 
 			actor.send({ type: 'WEBSOCKET_CONNECTED' });
 
-			// Initialize sessions first
 			actor.send({
 				type: 'SESSIONS_LOADED',
 				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
@@ -264,10 +192,7 @@ describe('chatMachine', () => {
 			const snapshot = actor.getSnapshot();
 			const chatHistory = snapshot.context.sessionChatHistories.get(TEST_SESSION_ID) || [];
 			expect(chatHistory).toHaveLength(1);
-			expect(chatHistory[0]).toEqual({
-				role: 'user',
-				content: 'Hello',
-			});
+			expect(chatHistory[0]).toEqual({ role: 'user', content: 'Hello' });
 
 			actor.stop();
 		});
@@ -277,7 +202,6 @@ describe('chatMachine', () => {
 
 			actor.send({ type: 'WEBSOCKET_CONNECTED' });
 
-			// Initialize sessions first
 			actor.send({
 				type: 'SESSIONS_LOADED',
 				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
@@ -290,31 +214,7 @@ describe('chatMachine', () => {
 			const snapshot = actor.getSnapshot();
 			const chatHistory = snapshot.context.sessionChatHistories.get(TEST_SESSION_ID) || [];
 			expect(chatHistory).toHaveLength(2);
-			expect(chatHistory[1]).toEqual({
-				role: 'assistant',
-				content: 'Echo: Hello',
-				logs: ['log1', 'log2'],
-			});
-
-			actor.stop();
-		});
-
-		test('should reset currentLogs when sending message', () => {
-			const actor = createTestActor({
-				currentLogs: ['old log 1', 'old log 2'],
-			});
-
-			actor.send({ type: 'WEBSOCKET_CONNECTED' });
-
-			// Initialize sessions first
-			actor.send({
-				type: 'SESSIONS_LOADED',
-				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
-			});
-
-			actor.send({ type: 'SEND_MESSAGE', message: 'Test' });
-
-			expect(actor.getSnapshot().context.currentLogs).toEqual([]);
+			expect(chatHistory[1]).toEqual({ role: 'assistant', content: 'Echo: Hello' });
 
 			actor.stop();
 		});
@@ -324,7 +224,6 @@ describe('chatMachine', () => {
 
 			actor.send({ type: 'WEBSOCKET_CONNECTED' });
 
-			// Initialize sessions first
 			actor.send({
 				type: 'SESSIONS_LOADED',
 				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
@@ -340,90 +239,6 @@ describe('chatMachine', () => {
 			expect(chatHistory).toHaveLength(2);
 			expect(chatHistory[1]!.content).toContain('API Error');
 			expect(snapshot.context.error).toContain('API Error');
-
-			actor.stop();
-		});
-	});
-
-	describe('websocket messages during sending', () => {
-		test('should collect websocket messages while sending', async () => {
-			// Use delay to keep the actor in 'sending' state
-			const actor = createTestActor(undefined, 100);
-
-			actor.send({ type: 'WEBSOCKET_CONNECTED' });
-
-			// Initialize sessions first
-			actor.send({
-				type: 'SESSIONS_LOADED',
-				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
-			});
-
-			actor.send({ type: 'SEND_MESSAGE', message: 'Test' });
-
-			// Wait for state transition to 'sending'
-			await new Promise((resolve) => setTimeout(resolve, 10));
-
-			// Simulate websocket messages arriving (correct ServerMessage format with payload)
-			actor.send({
-				type: 'WEBSOCKET_MESSAGE',
-				data: JSON.stringify({
-					type: 'log',
-					payload: {
-						sessionId: TEST_SESSION_ID,
-						data: 'log message 1',
-					},
-				}),
-			});
-			actor.send({
-				type: 'WEBSOCKET_MESSAGE',
-				data: JSON.stringify({
-					type: 'log',
-					payload: {
-						sessionId: TEST_SESSION_ID,
-						data: 'log message 2',
-					},
-				}),
-			});
-
-			const snapshot = actor.getSnapshot();
-			expect(snapshot.context.currentLogs).toEqual(['log message 1', 'log message 2']);
-
-			actor.stop();
-		});
-
-		test('should clear currentLogs after successful response', async () => {
-			// Use delay to keep the actor in 'sending' state long enough to test
-			const actor = createTestActor(undefined, 50);
-
-			actor.send({ type: 'WEBSOCKET_CONNECTED' });
-
-			// Initialize sessions first
-			actor.send({
-				type: 'SESSIONS_LOADED',
-				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
-			});
-
-			actor.send({ type: 'SEND_MESSAGE', message: 'Test' });
-
-			// Wait for state transition to 'sending'
-			await new Promise((resolve) => setTimeout(resolve, 10));
-
-			actor.send({
-				type: 'WEBSOCKET_MESSAGE',
-				data: JSON.stringify({
-					type: 'log',
-					payload: {
-						sessionId: TEST_SESSION_ID,
-						data: 'log 1',
-					},
-				}),
-			});
-			expect(actor.getSnapshot().context.currentLogs).toHaveLength(1);
-
-			// Wait for the response to complete (longer than the delay in the actor)
-			await new Promise((resolve) => setTimeout(resolve, 100));
-
-			expect(actor.getSnapshot().context.currentLogs).toEqual([]);
 
 			actor.stop();
 		});
@@ -453,7 +268,6 @@ describe('chatMachine', () => {
 
 			if (initialState === 'idle') {
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
-				// Initialize sessions for idle state tests that send messages
 				if (event.type === 'SEND_MESSAGE') {
 					actor.send({
 						type: 'SESSIONS_LOADED',
@@ -484,18 +298,15 @@ describe('chatMachine', () => {
 
 			actor.send({ type: 'WEBSOCKET_CONNECTED' });
 
-			// Initialize sessions first
 			actor.send({
 				type: 'SESSIONS_LOADED',
 				sessions: [{ id: TEST_SESSION_ID, model: 'haiku', createdAt: new Date().toISOString() }],
 			});
 
 			actor.send({ type: 'SEND_MESSAGE', message: 'Message 1' });
-
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			actor.send({ type: 'SEND_MESSAGE', message: 'Message 2' });
-
 			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			const snapshot = actor.getSnapshot();
@@ -514,13 +325,11 @@ describe('chatMachine', () => {
 				const mockSocket = createMockSocket();
 				let capturedRequestId: string | null = null;
 
-				// Capture the requestId when session:create is emitted
 				mockSocket.emit = (event: string, data: unknown) => {
 					if (event === 'session:create') {
 						const payload = data as { requestId: string; model?: string };
 						capturedRequestId = payload.requestId;
 
-						// Simulate server response after a short delay
 						setTimeout(() => {
 							const listeners = (mockSocket as any)._listeners?.['session:created'] || [];
 							listeners.forEach((listener: Function) => {
@@ -539,7 +348,6 @@ describe('chatMachine', () => {
 					return mockSocket;
 				};
 
-				// Track registered listeners
 				const listeners: Record<string, Function[]> = {};
 				mockSocket.on = (event?: string, handler?: Function) => {
 					if (event && handler) {
@@ -559,17 +367,12 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
 				actor.send({ type: 'CREATE_SESSION' });
 
-				// Wait for session creation to complete
 				await new Promise((resolve) => setTimeout(resolve, 100));
 
 				const snapshot = actor.getSnapshot();
@@ -625,11 +428,7 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -648,10 +447,7 @@ describe('chatMachine', () => {
 			test('should reject with timeout error when no response within 30 seconds', async () => {
 				const mockSocket = createMockSocket();
 
-				mockSocket.emit = () => {
-					// Don't emit any response - simulate timeout
-					return mockSocket;
-				};
+				mockSocket.emit = () => mockSocket;
 
 				const listeners: Record<string, Function[]> = {};
 				mockSocket.on = (event?: string, handler?: Function) => {
@@ -703,12 +499,9 @@ describe('chatMachine', () => {
 								socket.on('session:created', handleCreated);
 								socket.on('session:error', handleError);
 
-								socket.emit('session:create', {
-									model,
-									requestId,
-								});
+								socket.emit('session:create', { model, requestId });
 
-								// Short timeout for testing (100ms instead of 30s)
+								// Short timeout for testing
 								setTimeout(() => {
 									socket.off('session:created', handleCreated);
 									socket.off('session:error', handleError);
@@ -719,11 +512,7 @@ describe('chatMachine', () => {
 					},
 				});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -749,7 +538,6 @@ describe('chatMachine', () => {
 
 						setTimeout(() => {
 							const listeners = (mockSocket as any)._listeners?.['session:created'] || [];
-							// First emit with wrong requestId
 							listeners.forEach((listener: Function) => {
 								listener({
 									type: 'session:created',
@@ -762,7 +550,6 @@ describe('chatMachine', () => {
 								});
 							});
 
-							// Then emit with correct requestId
 							setTimeout(() => {
 								listeners.forEach((listener: Function) => {
 									listener({
@@ -800,11 +587,7 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -814,7 +597,6 @@ describe('chatMachine', () => {
 
 				const snapshot = actor.getSnapshot();
 				expect(snapshot.value).toBe('idle');
-				// Should have the correct session, not the wrong one
 				expect(snapshot.context.sessions).toHaveLength(1);
 				expect(snapshot.context.sessions[0]!.id).toBe('correct-session-123');
 				expect(snapshot.context.currentSessionId).toBe('correct-session-123');
@@ -868,15 +650,10 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
-				// Select sonnet model before creating session
 				actor.send({ type: 'SELECT_MODEL', model: 'sonnet' });
 				actor.send({ type: 'CREATE_SESSION' });
 
@@ -946,14 +723,9 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
-				// Start with some existing sessions
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
 				actor.send({
 					type: 'SESSIONS_LOADED',
@@ -1017,11 +789,7 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -1029,8 +797,7 @@ describe('chatMachine', () => {
 
 				await new Promise((resolve) => setTimeout(resolve, 100));
 
-				const snapshot = actor.getSnapshot();
-				expect(snapshot.context.currentSessionId).toBe('newly-created-session');
+				expect(actor.getSnapshot().context.currentSessionId).toBe('newly-created-session');
 
 				actor.stop();
 			});
@@ -1076,11 +843,7 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -1088,8 +851,7 @@ describe('chatMachine', () => {
 
 				await new Promise((resolve) => setTimeout(resolve, 100));
 
-				const snapshot = actor.getSnapshot();
-				expect(snapshot.context.error).toContain('Server is overloaded');
+				expect(actor.getSnapshot().context.error).toContain('Server is overloaded');
 
 				actor.stop();
 			});
@@ -1137,11 +899,7 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -1195,11 +953,7 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
@@ -1215,31 +969,19 @@ describe('chatMachine', () => {
 
 		describe('AC-3: additional error scenarios', () => {
 			test.skip('should throw error immediately when socket is null', async () => {
-				// Note: This test is skipped because XState's invoke input throws are not caught by onError
-				// In practice, the socket is always available when the machine is running
-				// This edge case would result in an unhandled error rather than graceful degradation
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: null as any,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: null as any } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
-
-				// This should throw when trying to create session with null socket
 				actor.send({ type: 'CREATE_SESSION' });
 
-				// The error should be caught and stored
-				// Wait for error to propagate through the state machine
 				await new Promise((resolve) => setTimeout(resolve, 100));
 
 				const snapshot = actor.getSnapshot();
 				expect(snapshot.value).toBe('idle');
 				expect(snapshot.context.error).toBeTruthy();
-				expect(String(snapshot.context.error)).toContain('Socket not available');
 
 				actor.stop();
 			});
@@ -1255,18 +997,12 @@ describe('chatMachine', () => {
 
 						setTimeout(() => {
 							const listeners = (mockSocket as any)._listeners?.['session:created'] || [];
-							// First send malformed response (missing required fields) - should be ignored
+							// First send malformed response — should be ignored
 							listeners.forEach((listener: Function) => {
-								listener({
-									type: 'session:created',
-									payload: {
-										// Missing requestId, id, model, createdAt
-										// This should be gracefully ignored
-									},
-								});
+								listener({ type: 'session:created', payload: {} });
 							});
 
-							// Then send valid response after a delay
+							// Then send valid response
 							setTimeout(() => {
 								listeners.forEach((listener: Function) => {
 									listener({
@@ -1304,22 +1040,16 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
 				actor.send({ type: 'CREATE_SESSION' });
 
-				// Should eventually succeed despite malformed response
 				await new Promise((resolve) => setTimeout(resolve, 100));
 
 				const snapshot = actor.getSnapshot();
 				expect(snapshot.value).toBe('idle');
-				// Should have recovered and created session successfully
 				expect(snapshot.context.sessions).toHaveLength(1);
 				expect(snapshot.context.sessions[0]!.id).toBe('recovery-session');
 
@@ -1335,12 +1065,9 @@ describe('chatMachine', () => {
 						const payload = data as { requestId: string };
 						emittedRequestIds.push(payload.requestId);
 
-						// Respond to each request with its own session
-						// Get current listeners snapshot before setTimeout
 						setTimeout(() => {
-							// Get listeners at the time of response (not when emit was called)
-							const currentListeners = (mockSocket as any)._listeners?.['session:created'] || [];
-							// Make a copy to avoid issues with modifications during iteration
+							const currentListeners =
+								(mockSocket as any)._listeners?.['session:created'] || [];
 							const listenersCopy = [...currentListeners];
 							listenersCopy.forEach((listener: Function) => {
 								listener({
@@ -1377,16 +1104,11 @@ describe('chatMachine', () => {
 
 				const machine = chatMachine.provide({});
 
-				const actor = createActor(machine, {
-					input: {
-						socket: mockSocket,
-					},
-				});
+				const actor = createActor(machine, { input: { socket: mockSocket } });
 				actor.start();
 
 				actor.send({ type: 'WEBSOCKET_CONNECTED' });
 
-				// Send multiple CREATE_SESSION events rapidly
 				actor.send({ type: 'CREATE_SESSION' });
 				await new Promise((resolve) => setTimeout(resolve, 150));
 
@@ -1396,14 +1118,11 @@ describe('chatMachine', () => {
 				actor.send({ type: 'CREATE_SESSION' });
 				await new Promise((resolve) => setTimeout(resolve, 150));
 
-				// All requestIds should be unique
 				expect(emittedRequestIds.length).toBe(3);
 				const uniqueIds = new Set(emittedRequestIds);
 				expect(uniqueIds.size).toBe(3);
 
-				// Should have created 3 sessions
-				const snapshot = actor.getSnapshot();
-				expect(snapshot.context.sessions.length).toBe(3);
+				expect(actor.getSnapshot().context.sessions.length).toBe(3);
 
 				actor.stop();
 			});

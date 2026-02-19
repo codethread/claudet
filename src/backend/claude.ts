@@ -1,0 +1,70 @@
+import { randomUUID } from 'node:crypto';
+
+export type ClaudeModel = 'haiku' | 'sonnet';
+
+export interface Session {
+	id: string;
+	model: ClaudeModel;
+	createdAt: Date;
+	messageCount: number;
+}
+
+const sessions = new Map<string, Session>();
+
+export function createSession(model: ClaudeModel = 'haiku'): Session {
+	const id = randomUUID();
+	const session: Session = { id, model, createdAt: new Date(), messageCount: 0 };
+	sessions.set(id, session);
+	return session;
+}
+
+export function getSession(id: string): Session | undefined {
+	return sessions.get(id);
+}
+
+export function listSessions(): Session[] {
+	return Array.from(sessions.values());
+}
+
+export async function sendMessage(sessionId: string, message: string): Promise<string> {
+	const session = sessions.get(sessionId);
+	if (!session) throw new Error(`Session ${sessionId} not found`);
+
+	// Fake mode for E2E testing — avoids real Claude CLI calls
+	if (process.env.CLAUDE_TEST_FAKE === 'true') {
+		await new Promise((r) => setTimeout(r, 300));
+		session.messageCount++;
+		return `Echo: ${message.substring(0, 100)}`;
+	}
+
+	const isFirstMessage = session.messageCount === 0;
+	const args: string[] = isFirstMessage
+		? ['--session-id', sessionId, '--model', session.model, '--print', message]
+		: ['--resume', sessionId, '--print', message];
+
+	session.messageCount++;
+
+	const claudeDir = process.env.CLAUDE_DIR;
+
+	// Strip CLAUDECODE from the environment so nested sessions don't get blocked
+	const { CLAUDECODE: _, ...safeEnv } = process.env;
+
+	const proc = Bun.spawn(['claude', ...args], {
+		stdout: 'pipe',
+		stderr: 'pipe',
+		env: safeEnv,
+		...(claudeDir && { cwd: claudeDir }),
+	});
+
+	const [output, errText] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	const exitCode = await proc.exited;
+
+	if (exitCode !== 0) {
+		throw new Error(`Claude exited with code ${exitCode}: ${errText.trim()}`);
+	}
+
+	return output.trim();
+}

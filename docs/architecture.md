@@ -22,21 +22,20 @@ This is a **Bun-native full-stack application** using `Bun.serve()` with routing
 
 Server imports `index.html` which includes `<script type="module" src="./frontend.tsx">`. Bun's bundler automatically transpiles and bundles React/TypeScript.
 
-### 2. Persistent Claude CLI Integration (with Dependency Injection)
+### 2. Simple Claude CLI Integration (`src/backend/claude.ts`)
 
-- Spawns a long-running `claude` CLI process with streaming JSON I/O
-- **Abstraction Layer**: `ClaudeCodeService` interface allows swapping real vs. fake implementations
-- **Production**: Uses `RealClaudeCodeService` (spawns actual Claude CLI)
-- **Testing**: Uses `FakeClaudeCodeService` (mock with deterministic responses)
-- Maintains session state and request/response correlation via session IDs
-- API endpoint at `/api/chat` for sending messages to Claude
-- WebSocket endpoint at `/ws` for real-time log streaming to clients
+- Each message invokes `claude --print` as a one-shot process (no persistent processes)
+- **First message in a session**: `claude --session-id <uuid> --model <model> --print "<message>"`
+- **Subsequent messages**: `claude --resume <uuid> --print "<message>"`
+- Session metadata (ID, model, message count) stored in a simple in-memory Map
+- **Testing**: Set `CLAUDE_TEST_FAKE=true` to skip real Claude CLI calls and return echo responses
+- No stream parsing, no pending request correlation — just stdout capture
 
-### 3. State Machine (src/backend/claudeRunner.ts)
+### 3. Removed: XState Backend State Machine
 
-- XState 5 state machine manages Claude process lifecycle
-- Factory pattern: `createClaudeRunnerMachine(service)` accepts injected service
-- Handles process startup, message sending, output parsing, and error recovery
+- The old `claudeRunner.ts` XState machine has been removed
+- The old `SessionManager`, `ClaudeCodeService`, `RealClaudeCodeService`, `FakeClaudeCodeService` have been removed
+- Backend session management is now a simple Map in `claude.ts`
 
 ### 4. HTTPS Development Server
 
@@ -500,18 +499,9 @@ Custom build script with:
 src/
 ├── backend/
 │   ├── index.tsx                  # Production entry point
-│   ├── index.test-server.tsx      # Test entry point (uses FakeClaudeCodeService)
+│   ├── index.test-server.tsx      # Test entry point (sets CLAUDE_TEST_FAKE=true)
 │   ├── server.ts                  # Bun.serve + routes + cert validation
-│   ├── SessionManager.ts          # Manages multiple Claude sessions
-│   ├── claudeRunner.ts            # XState machine for Claude process
-│   ├── claudeRunner.test.ts       # Unit tests for state machine
-│   ├── claudeRunner.integration.test.ts  # Integration tests with real CLI
-│   └── services/
-│       ├── index.ts                      # Service exports
-│       ├── ClaudeCodeService.ts          # Interface definition
-│       ├── RealClaudeCodeService.ts      # Production implementation
-│       ├── FakeClaudeCodeService.ts      # Test mock implementation
-│       └── FakeClaudeCodeService.test.ts # Mock unit tests
+│   ├── claude.ts                  # Simple Claude CLI interface (--print / --resume)
 ├── frontend/
 │   ├── index.html             # HTML entry with React imports (includes FOUC script + SW registration)
 │   ├── frontend.tsx           # React root component (wraps with ThemeProvider)

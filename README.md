@@ -4,15 +4,14 @@ A full-stack web application that provides an interactive chat interface for Cla
 
 ## Features
 
-- 🤖 **Claude CLI Integration** - Persistent Claude Code session with streaming JSON I/O and dependency injection
-- 🎭 **XState State Machine** - Robust process lifecycle management for Claude CLI
+- 🤖 **Claude CLI Integration** - Simple `--print` / `--resume` invocations per message, no persistent processes
 - 📱 **Progressive Web App** - Installable on mobile devices with offline support
 - 🔒 **HTTPS Development** - Secure local development with TLS certificates
 - 📲 **Mobile-First Design** - Responsive UI with safe area utilities for iOS devices
 - ⚡ **Hot Module Reloading** - Fast development with Bun's built-in HMR
 - 🎨 **Modern UI** - Built with shadcn/ui components and Tailwind CSS 4
 - 🌓 **Dark Mode** - Light, dark, and system theme support with FOUC prevention
-- 🔌 **WebSocket Streaming** - Real-time log streaming from Claude process
+- 🔌 **Socket.IO** - Real-time connection with automatic reconnection
 - 📦 **Zero Config** - All-in-one Bun runtime (no separate bundler needed)
 - 🧪 **Comprehensive Testing** - Unit tests with Bun and E2E tests with Playwright
 
@@ -111,9 +110,9 @@ Production builds are output to the `dist/` folder with:
 For complete details on the project architecture, technology stack, project structure, and development patterns, see the [Architecture Guide](docs/architecture.md).
 
 **Quick Overview**:
-- **Backend**: Bun.serve() with XState 5 state machine managing Claude CLI process
-- **Frontend**: React 19 + Tailwind CSS 4 + shadcn/ui with dark mode support
-- **Testing**: Bun test runner (unit) + Playwright (E2E) with dependency injection for mocking
+- **Backend**: Bun.serve() + Socket.IO; each chat message invokes `claude --print` / `claude --resume` as a one-shot process
+- **Frontend**: React 19 + XState 5 + Tailwind CSS 4 + shadcn/ui with dark mode support
+- **Testing**: Bun test runner (unit) + Playwright (E2E); set `CLAUDE_TEST_FAKE=true` to skip real CLI calls
 - **PWA**: Offline-first with service worker and installable on mobile devices
 
 ## License
