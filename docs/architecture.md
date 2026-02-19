@@ -13,6 +13,7 @@ This document provides a comprehensive overview of Claudet's architecture, techn
 - **AI Integration:** Claude Code CLI - Persistent session with streaming I/O
 - **PWA:** Progressive Web App with service worker, offline support, and installability
 - **Testing:** Bun test runner (unit) + [Playwright](https://playwright.dev/) (E2E)
+- **Mobile:** [Expo](https://expo.dev/) / React Native (in `mobile/`) - Node.js + npm required (Bun lacks npm)
 
 ## Server Architecture
 
@@ -45,12 +46,18 @@ Server imports `index.html` which includes `<script type="module" src="./fronten
 - Serves on `0.0.0.0:3000` for network access
 - Displays QR code on startup for easy mobile access
 
-### 5. Routes
+### 5. Mobile HTTP API Server (port 3001)
+
+A secondary plain HTTP server runs alongside the HTTPS server, specifically for the React Native mobile client. React Native in dev rejects self-signed TLS certs, so this avoids that friction.
+
+- **Port:** 3001 (HTTP, no TLS)
+- `POST /api/sessions` - Create a new Claude session, returns `{ id, model }`
+- `POST /api/chat` - Send a message, body: `{ message, sessionId }`, returns `{ response }`
+
+### 6. Routes (HTTPS server, port 3000)
 
 - `/*` - Serves index.html (SPA fallback)
-- `/api/chat` - POST endpoint for Claude interactions
 - `/api/models` - GET endpoint for available models
-- `/api/sessions` - GET/POST endpoints for session management
 - `/api/transcribe` - POST endpoint for audio transcription (voice dictation)
 - `/socket.io/` - Socket.IO endpoint for real-time communication (WebSocket)
 - `/sw.js` - Service worker script
@@ -558,6 +565,12 @@ docs/
 
 certs/                     # Generated HTTPS certificates (gitignored)
 
+mobile/                    # React Native Expo app (Node.js/npm, separate from Bun project)
+├── App.tsx                # Single-screen chat UI (input, send, reply display)
+├── app.json               # Expo config (HTTP allowed for dev: ATS + cleartext)
+├── package.json           # npm dependencies (expo, react-native, expo-constants)
+└── assets/                # Expo default assets
+
 playwright.config.ts       # Playwright configuration
 bunfig.toml               # Bun configuration (test exclusions)
 ```
@@ -654,12 +667,19 @@ Certificates are located in a gitignored directory and must be created during se
 
 ## API Endpoints
 
+### HTTPS Server (port 3000)
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/*` | GET | Serves `index.html` (SPA fallback) |
-| `/api/chat` | POST | Send messages to Claude CLI |
 | `/api/models` | GET | Get available Claude models and default model |
-| `/api/sessions` | GET | List all Claude sessions |
-| `/api/sessions` | POST | Create a new Claude session |
 | `/api/transcribe` | POST | Upload audio for transcription (returns JSON with `text` field) |
+| `/socket.io/` | WebSocket | Socket.IO — primary chat interface (events: `chat:send`, `session:create`, etc.) |
+
+### HTTP Server (port 3001) — Mobile API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sessions` | POST | Create a new Claude session, returns `{ id, model }` |
+| `/api/chat` | POST | Send message `{ message, sessionId }`, returns `{ response }` |
 | `/socket.io/` | WebSocket | Socket.IO endpoint for real-time communication |
