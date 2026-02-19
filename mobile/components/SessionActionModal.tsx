@@ -7,6 +7,9 @@ import {
 	Pressable,
 	StyleSheet,
 	useColorScheme,
+	KeyboardAvoidingView,
+	Platform,
+	Keyboard,
 } from 'react-native';
 import type { Session } from '../types';
 
@@ -71,62 +74,70 @@ export function SessionActionModal({ session, onClose, onRename, onDelete }: Pro
 			animationType="fade"
 			onRequestClose={onClose}
 		>
-			<Pressable style={styles.overlay} onPress={onClose}>
-				<Pressable style={[styles.card, { backgroundColor: cardBg }]} onPress={() => {}}>
-					<Text style={[styles.title, { color: textColor }]}>Rename Session</Text>
+			<KeyboardAvoidingView
+				style={styles.kav}
+				behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+			>
+				<Pressable style={styles.overlay} onPress={Keyboard.dismiss}>
+					<Pressable style={[styles.card, { backgroundColor: cardBg }]} onPress={() => {}}>
+						<Text style={[styles.title, { color: textColor }]}>Rename Session</Text>
 
-					<TextInput
-						style={[styles.input, { backgroundColor: inputBg, color: textColor, borderColor }]}
-						placeholder="Session name"
-						placeholderTextColor={subtextColor}
-						value={nameInput}
-						onChangeText={setNameInput}
-						autoFocus
-						returnKeyType="done"
-						onSubmitEditing={handleSave}
-					/>
+						<TextInput
+							style={[styles.input, { backgroundColor: inputBg, color: textColor, borderColor }]}
+							placeholder="Session name"
+							placeholderTextColor={subtextColor}
+							value={nameInput}
+							onChangeText={setNameInput}
+							autoFocus
+							returnKeyType="done"
+							onSubmitEditing={handleSave}
+						/>
 
-					<View style={styles.buttonRow}>
+						<View style={styles.buttonRow}>
+							<Pressable
+								style={[styles.button, styles.cancelButton, { backgroundColor: cancelBg }]}
+								onPress={onClose}
+							>
+								<Text style={[styles.buttonText, { color: textColor }]}>Cancel</Text>
+							</Pressable>
+
+							<Pressable
+								style={[
+									styles.button,
+									styles.saveButton,
+									{ backgroundColor: saveDisabled ? saveDisabledBg : saveBg },
+								]}
+								onPress={handleSave}
+								disabled={saveDisabled}
+							>
+								<Text style={[styles.buttonText, { color: '#fff' }]}>
+									{saving ? 'Saving...' : 'Save'}
+								</Text>
+							</Pressable>
+						</View>
+
+						<View style={[styles.divider, { backgroundColor: borderColor }]} />
+
 						<Pressable
-							style={[styles.button, styles.cancelButton, { backgroundColor: cancelBg }]}
-							onPress={onClose}
+							style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
+							onPress={handleDelete}
+							disabled={deleting}
 						>
-							<Text style={[styles.buttonText, { color: textColor }]}>Cancel</Text>
-						</Pressable>
-
-						<Pressable
-							style={[
-								styles.button,
-								styles.saveButton,
-								{ backgroundColor: saveDisabled ? saveDisabledBg : saveBg },
-							]}
-							onPress={handleSave}
-							disabled={saveDisabled}
-						>
-							<Text style={[styles.buttonText, { color: '#fff' }]}>
-								{saving ? 'Saving...' : 'Save'}
+							<Text style={styles.deleteButtonText}>
+								{deleting ? 'Deleting...' : 'Delete Session'}
 							</Text>
 						</Pressable>
-					</View>
-
-					<View style={[styles.divider, { backgroundColor: borderColor }]} />
-
-					<Pressable
-						style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
-						onPress={handleDelete}
-						disabled={deleting}
-					>
-						<Text style={styles.deleteButtonText}>
-							{deleting ? 'Deleting...' : 'Delete Session'}
-						</Text>
 					</Pressable>
 				</Pressable>
-			</Pressable>
+			</KeyboardAvoidingView>
 		</Modal>
 	);
 }
 
 const styles = StyleSheet.create({
+	kav: {
+		flex: 1,
+	},
 	overlay: {
 		flex: 1,
 		backgroundColor: 'rgba(0,0,0,0.5)',
