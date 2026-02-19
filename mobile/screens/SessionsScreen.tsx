@@ -10,6 +10,7 @@ import { ChatArea } from '../components/ChatArea';
 import { EmptyProjectView } from '../components/EmptyProjectView';
 import { Header } from '../components/Header';
 import { InputBar } from '../components/InputBar';
+import { SessionStrip } from '../components/SessionStrip';
 
 export function SessionsScreen() {
 	const isDark = useColorScheme() === 'dark';
@@ -44,6 +45,10 @@ export function SessionsScreen() {
 	const currentSession = sessions.find((s) => s.id === currentSessionId) ?? null;
 	const isDangerousMode = currentSession?.permissionMode === 'dangerouslySkipPermissions';
 
+	const projectSessions = currentProjectId
+		? sessions.filter((s) => s.projectPath === currentProjectId)
+		: [];
+
 	const hour = new Date().getHours();
 	const greeting =
 		hour < 12 ? 'Good morning, Adam' : hour < 18 ? 'Good afternoon, Adam' : 'Good evening, Adam';
@@ -61,6 +66,13 @@ export function SessionsScreen() {
 
 			{currentProjectId ? (
 				<>
+					<SessionStrip
+						sessions={projectSessions}
+						currentSessionId={currentSessionId}
+						onSelectSession={setCurrentSessionId}
+						onNewSession={handleNewSession}
+					/>
+
 					<ChatArea
 						messages={currentMessages}
 						loading={loading}
