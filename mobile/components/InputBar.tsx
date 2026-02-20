@@ -1,4 +1,5 @@
-import { StyleSheet, View, TextInput, Pressable, Text, useColorScheme } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { TextInput, IconButton, useTheme } from 'react-native-paper';
 
 interface Props {
 	input: string;
@@ -10,35 +11,37 @@ interface Props {
 }
 
 export function InputBar({ input, onChangeInput, onSend, editable, canSend, bottomInset }: Props) {
-	const isDark = useColorScheme() === 'dark';
-	const bg = isDark ? '#1c1c1e' : '#fff';
-	const inputBg = isDark ? '#2c2c2e' : '#f0f0f0';
-	const inputText = isDark ? '#fff' : '#000';
-	const border = isDark ? '#3a3a3c' : '#e0e0e0';
-
+	const theme = useTheme();
 	return (
 		<View
 			style={[
 				styles.row,
-				{ backgroundColor: bg, borderTopColor: border, paddingBottom: 12 + bottomInset },
+				{
+					backgroundColor: theme.colors.surface,
+					borderTopColor: theme.colors.outline,
+					paddingBottom: 12 + bottomInset,
+				},
 			]}
 		>
 			<TextInput
-				style={[styles.input, { backgroundColor: inputBg, color: inputText }]}
+				style={styles.input}
+				mode="outlined"
 				value={input}
 				onChangeText={onChangeInput}
 				placeholder="Type a message..."
-				placeholderTextColor={isDark ? '#636366' : '#999'}
 				multiline
 				editable={editable}
+				dense
+				outlineStyle={{ borderRadius: 20 }}
 			/>
-			<Pressable
-				style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
+			<IconButton
+				icon="send"
+				mode="contained"
 				onPress={onSend}
 				disabled={!canSend}
-			>
-				<Text style={styles.sendButtonText}>→</Text>
-			</Pressable>
+				size={22}
+				style={styles.sendButton}
+			/>
 		</View>
 	);
 }
@@ -47,33 +50,16 @@ const styles = StyleSheet.create({
 	row: {
 		flexDirection: 'row',
 		alignItems: 'flex-end',
-		padding: 12,
-		gap: 8,
-		borderTopWidth: 1,
+		paddingTop: 8,
+		paddingHorizontal: 12,
+		gap: 4,
+		borderTopWidth: StyleSheet.hairlineWidth,
 	},
 	input: {
 		flex: 1,
-		minHeight: 40,
 		maxHeight: 120,
-		borderRadius: 20,
-		paddingHorizontal: 16,
-		paddingVertical: 10,
-		fontSize: 15,
 	},
 	sendButton: {
-		width: 40,
-		height: 40,
-		borderRadius: 20,
-		backgroundColor: '#007AFF',
-		justifyContent: 'center',
-		alignItems: 'center',
-	},
-	sendButtonDisabled: {
-		backgroundColor: '#ccc',
-	},
-	sendButtonText: {
-		color: '#fff',
-		fontSize: 18,
-		fontWeight: '700',
+		marginBottom: 2,
 	},
 });

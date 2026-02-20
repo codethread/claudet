@@ -5,11 +5,12 @@ import {
 	type NativeSyntheticEvent,
 	type NativeScrollEvent,
 	useColorScheme,
-	Text,
+	StyleSheet,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { PaperProvider, MD3DarkTheme, MD3LightTheme, useTheme, Icon } from 'react-native-paper';
 import {
 	fetchSessions,
 	fetchModels,
@@ -27,6 +28,16 @@ import { AppContext } from './AppContext';
 import { SessionsScreen } from './screens/SessionsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import type { Message, PermissionMode, Project, Session } from './types';
+
+const LightTheme = {
+	...MD3LightTheme,
+	colors: { ...MD3LightTheme.colors, primary: '#007AFF' },
+};
+
+const DarkTheme = {
+	...MD3DarkTheme,
+	colors: { ...MD3DarkTheme.colors, primary: '#0a84ff' },
+};
 
 const Tab = createBottomTabNavigator();
 
@@ -253,22 +264,20 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 }
 
 function TabBar() {
-	const isDark = useColorScheme() === 'dark';
+	const theme = useTheme();
 
 	return (
 		<Tab.Navigator
 			screenOptions={{
 				headerShown: false,
 				tabBarStyle: {
-					backgroundColor: isDark ? '#1c1c1e' : '#fff',
-					borderTopColor: isDark ? '#3a3a3c' : '#e0e0e0',
+					backgroundColor: theme.colors.surface,
+					borderTopColor: theme.colors.outline,
+					borderTopWidth: StyleSheet.hairlineWidth,
 				},
-				tabBarActiveTintColor: isDark ? '#fff' : '#007AFF',
-				tabBarInactiveTintColor: isDark ? '#8e8e93' : '#8e8e93',
-				tabBarLabelStyle: {
-					fontSize: 12,
-					fontWeight: '500',
-				},
+				tabBarActiveTintColor: theme.colors.primary,
+				tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+				tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
 			}}
 		>
 			<Tab.Screen
@@ -276,8 +285,8 @@ function TabBar() {
 				component={SessionsScreen}
 				options={{
 					tabBarLabel: 'Sessions',
-					tabBarIcon: ({ color }: { color: string }) => (
-						<Text style={{ fontSize: 20, color }}>💬</Text>
+					tabBarIcon: ({ color, size }) => (
+						<Icon source="chat-processing-outline" size={size} color={color} />
 					),
 				}}
 			/>
@@ -286,8 +295,8 @@ function TabBar() {
 				component={SettingsScreen}
 				options={{
 					tabBarLabel: 'Settings',
-					tabBarIcon: ({ color }: { color: string }) => (
-						<Text style={{ fontSize: 20, color }}>⚙️</Text>
+					tabBarIcon: ({ color, size }) => (
+						<Icon source="cog-outline" size={size} color={color} />
 					),
 				}}
 			/>
@@ -296,16 +305,19 @@ function TabBar() {
 }
 
 export default function App() {
-	const isDark = useColorScheme() === 'dark';
+	const colorScheme = useColorScheme();
+	const theme = colorScheme === 'dark' ? DarkTheme : LightTheme;
 
 	return (
 		<SafeAreaProvider>
-			<AppStateProvider>
-				<NavigationContainer>
-					<StatusBar style={isDark ? 'light' : 'dark'} />
-					<TabBar />
-				</NavigationContainer>
-			</AppStateProvider>
+			<PaperProvider theme={theme}>
+				<AppStateProvider>
+					<NavigationContainer>
+						<StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+						<TabBar />
+					</NavigationContainer>
+				</AppStateProvider>
+			</PaperProvider>
 		</SafeAreaProvider>
 	);
 }

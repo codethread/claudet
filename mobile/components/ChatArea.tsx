@@ -2,15 +2,12 @@ import { useRef, useEffect } from 'react';
 import {
 	Animated,
 	StyleSheet,
-	Text,
 	View,
 	ScrollView,
-	ActivityIndicator,
-	Pressable,
-	useColorScheme,
 	type NativeSyntheticEvent,
 	type NativeScrollEvent,
 } from 'react-native';
+import { ActivityIndicator, Banner, Text, IconButton, useTheme } from 'react-native-paper';
 import { ChatMessage } from './ChatMessage';
 import type { Message } from '../types';
 
@@ -49,11 +46,8 @@ export function ChatArea({
 	onScroll,
 	bottomOffset,
 }: Props) {
-	const isDark = useColorScheme() === 'dark';
+	const theme = useTheme();
 	const bounceAnim = useRef(new Animated.Value(0)).current;
-
-	const emptyColor = isDark ? '#636366' : '#999';
-	const loadingColor = isDark ? '#8e8e93' : '#666';
 
 	useEffect(() => {
 		if (!showScrollButton) return;
@@ -68,16 +62,13 @@ export function ChatArea({
 
 	return (
 		<>
-			{error ? (
-				<View style={styles.errorBanner}>
-					<Text style={styles.errorBannerText} numberOfLines={3}>
-						⚠ {friendlyError(error)}
-					</Text>
-					<Pressable onPress={onDismissError} hitSlop={8} style={styles.errorDismiss}>
-						<Text style={styles.errorDismissText}>✕</Text>
-					</Pressable>
-				</View>
-			) : null}
+			<Banner
+				visible={!!error}
+				actions={[{ label: 'Dismiss', onPress: onDismissError }]}
+				icon="alert"
+			>
+				{error ? friendlyError(error) : ''}
+			</Banner>
 
 			<ScrollView
 				ref={scrollRef}
@@ -89,7 +80,10 @@ export function ChatArea({
 				scrollEventThrottle={100}
 			>
 				{messages.length === 0 && !error && (
-					<Text style={[styles.empty, { color: emptyColor }]}>
+					<Text
+						variant="bodyMedium"
+						style={[styles.empty, { color: theme.colors.onSurfaceVariant }]}
+					>
 						{loadingMessages ? 'Loading messages…' : 'Send a message to start chatting'}
 					</Text>
 				)}
@@ -99,11 +93,13 @@ export function ChatArea({
 				))}
 				{loading && (
 					<View style={styles.loadingRow}>
-						<ActivityIndicator size="small" color={loadingColor} />
-						<Text style={[styles.loadingText, { color: loadingColor }]}>Thinking...</Text>
+						<ActivityIndicator size="small" />
+						<Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+							Thinking...
+						</Text>
 					</View>
 				)}
-				</ScrollView>
+			</ScrollView>
 
 			{showScrollButton && (
 				<Animated.View
@@ -112,9 +108,13 @@ export function ChatArea({
 						{ bottom: bottomOffset, transform: [{ translateY: bounceAnim }] },
 					]}
 				>
-					<Pressable style={styles.scrollButton} onPress={onScrollToBottom}>
-						<Text style={styles.scrollButtonText}>↓</Text>
-					</Pressable>
+					<IconButton
+						icon="arrow-down"
+						mode="contained"
+						onPress={onScrollToBottom}
+						size={20}
+						style={styles.scrollButton}
+					/>
 				</Animated.View>
 			)}
 		</>
@@ -132,7 +132,6 @@ const styles = StyleSheet.create({
 	empty: {
 		textAlign: 'center',
 		marginTop: 40,
-		fontSize: 15,
 	},
 	loadingRow: {
 		flexDirection: 'row',
@@ -141,14 +140,6 @@ const styles = StyleSheet.create({
 		paddingVertical: 4,
 		alignSelf: 'flex-start',
 	},
-	loadingText: {
-		fontSize: 14,
-	},
-	errorText: {
-		color: '#ff3b30',
-		fontSize: 13,
-		paddingVertical: 4,
-	},
 	scrollButtonWrap: {
 		position: 'absolute',
 		left: 0,
@@ -156,44 +147,10 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 	},
 	scrollButton: {
-		width: 40,
-		height: 40,
-		borderRadius: 20,
-		backgroundColor: '#007AFF',
-		justifyContent: 'center',
-		alignItems: 'center',
+		elevation: 5,
 		shadowColor: '#000',
 		shadowOffset: { width: 0, height: 2 },
 		shadowOpacity: 0.25,
 		shadowRadius: 4,
-		elevation: 5,
-	},
-	scrollButtonText: {
-		color: '#fff',
-		fontSize: 20,
-		fontWeight: '700',
-		lineHeight: 24,
-	},
-	errorBanner: {
-		flexDirection: 'row',
-		alignItems: 'flex-start',
-		backgroundColor: '#3a0000',
-		paddingHorizontal: 14,
-		paddingVertical: 10,
-		gap: 8,
-	},
-	errorBannerText: {
-		flex: 1,
-		color: '#ff6b6b',
-		fontSize: 13,
-		lineHeight: 18,
-	},
-	errorDismiss: {
-		paddingTop: 1,
-	},
-	errorDismissText: {
-		color: '#ff6b6b',
-		fontSize: 15,
-		fontWeight: '700',
 	},
 });

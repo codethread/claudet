@@ -1,4 +1,6 @@
-import { View, Text, Pressable, ScrollView, StyleSheet, useColorScheme } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Button, Text, useTheme } from 'react-native-paper';
+import { ScrollView } from 'react-native';
 import type { Project } from '../types';
 
 interface Props {
@@ -9,48 +11,49 @@ interface Props {
 }
 
 export function EmptyProjectView({ baseDir, projects, onOpenSettings, onSelectProject }: Props) {
-	const isDark = useColorScheme() === 'dark';
-	const text = isDark ? '#fff' : '#000';
-	const subtext = isDark ? '#ebebf5aa' : '#666';
-	const cardBg = isDark ? '#1c1c1e' : '#fff';
-	const border = isDark ? '#3a3a3c' : '#e0e0e0';
+	const theme = useTheme();
 
 	if (!baseDir) {
 		return (
 			<View style={styles.center}>
-				<Text style={[styles.title, { color: text }]}>No base directory set</Text>
-				<Text style={[styles.subtitle, { color: subtext }]}>
+				<Text variant="headlineSmall" style={[styles.title, { color: theme.colors.onBackground }]}>
+					No base directory set
+				</Text>
+				<Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
 					Open Settings to choose where your projects live.
 				</Text>
-				<Pressable style={styles.button} onPress={onOpenSettings}>
-					<Text style={styles.buttonText}>Open Settings</Text>
-				</Pressable>
+				<Button mode="contained" onPress={onOpenSettings} style={styles.button}>
+					Open Settings
+				</Button>
 			</View>
 		);
 	}
 
 	return (
 		<View style={styles.container}>
-			<Text style={[styles.title, { color: text }]}>Select a Project</Text>
-			<Text style={[styles.subtitle, { color: subtext }]}>~/{baseDir}</Text>
+			<Text variant="headlineSmall" style={[styles.title, { color: theme.colors.onBackground }]}>
+				Select a Project
+			</Text>
+			<Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
+				~/{baseDir}
+			</Text>
 
 			{projects.length === 0 ? (
-				<Text style={[styles.emptyText, { color: subtext }]}>
+				<Text variant="bodyMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
 					No git repositories found in ~/{baseDir}
 				</Text>
 			) : (
 				<ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
 					{projects.map((project) => (
-						<Pressable
+						<Button
 							key={project.id}
-							style={[styles.projectRow, { backgroundColor: cardBg, borderColor: border }]}
+							mode="outlined"
 							onPress={() => onSelectProject(project.id)}
+							style={styles.projectRow}
+							contentStyle={styles.projectRowContent}
 						>
-							<Text style={[styles.projectName, { color: text }]}>{project.name}</Text>
-							<Text style={[styles.projectPath, { color: subtext }]} numberOfLines={1}>
-								{project.path}
-							</Text>
-						</Pressable>
+							{project.name}
+						</Button>
 					))}
 				</ScrollView>
 			)}
@@ -70,27 +73,16 @@ const styles = StyleSheet.create({
 		padding: 24,
 	},
 	title: {
-		fontSize: 22,
-		fontWeight: '700',
 		marginBottom: 8,
 		textAlign: 'center',
 	},
 	subtitle: {
-		fontSize: 14,
 		marginBottom: 24,
 		textAlign: 'center',
 	},
 	button: {
-		backgroundColor: '#007AFF',
-		borderRadius: 12,
-		paddingVertical: 12,
-		paddingHorizontal: 28,
 		marginTop: 8,
-	},
-	buttonText: {
-		color: '#fff',
-		fontSize: 15,
-		fontWeight: '600',
+		borderRadius: 12,
 	},
 	list: {
 		flex: 1,
@@ -100,17 +92,10 @@ const styles = StyleSheet.create({
 	},
 	projectRow: {
 		borderRadius: 12,
-		borderWidth: 1,
-		padding: 16,
 	},
-	projectName: {
-		fontSize: 16,
-		fontWeight: '600',
-		marginBottom: 4,
-	},
-	projectPath: {
-		fontSize: 12,
-		fontFamily: 'monospace',
+	projectRowContent: {
+		alignItems: 'flex-start',
+		paddingVertical: 8,
 	},
 	emptyText: {
 		textAlign: 'center',

@@ -1,4 +1,5 @@
-import { ScrollView, View, Text, Pressable, StyleSheet, useColorScheme } from 'react-native';
+import { ScrollView, View, StyleSheet } from 'react-native';
+import { Chip, useTheme } from 'react-native-paper';
 import type { Session } from '../types';
 
 function sessionLabel(session: Session): string {
@@ -27,17 +28,10 @@ export function SessionStrip({
 	onNewSession,
 	onLongPressSession,
 }: Props) {
-	const isDark = useColorScheme() === 'dark';
-
-	const bg = isDark ? '#1c1c1e' : '#f2f2f7';
-	const chipBg = isDark ? '#2c2c2e' : '#fff';
-	const activeBg = isDark ? '#0a84ff' : '#007AFF';
-	const text = isDark ? '#fff' : '#000';
-	const subtext = isDark ? '#ebebf599' : '#888';
-	const border = isDark ? '#3a3a3c' : '#e0e0e0';
+	const theme = useTheme();
 
 	return (
-		<View style={[styles.container, { backgroundColor: bg, borderBottomColor: border }]}>
+		<View style={[styles.container, { backgroundColor: theme.colors.surfaceVariant, borderBottomColor: theme.colors.outline }]}>
 			<ScrollView
 				horizontal
 				showsHorizontalScrollIndicator={false}
@@ -46,31 +40,27 @@ export function SessionStrip({
 				{sessions.map((session) => {
 					const active = session.id === currentSessionId;
 					return (
-						<Pressable
+						<Chip
 							key={session.id}
-							style={[
-								styles.chip,
-								{ backgroundColor: active ? activeBg : chipBg, borderColor: border },
-							]}
+							selected={active}
 							onPress={() => onSelectSession(session.id)}
 							onLongPress={() => onLongPressSession(session)}
+							compact
+							style={styles.chip}
 						>
-							<Text style={[styles.chipLabel, { color: active ? '#fff' : text }]} numberOfLines={1}>
-								{sessionLabel(session)}
-							</Text>
-							<Text style={[styles.chipModel, { color: active ? '#ffffffaa' : subtext }]}>
-								{session.model}
-							</Text>
-						</Pressable>
+							{sessionLabel(session)}
+						</Chip>
 					);
 				})}
 
-				<Pressable
-					style={[styles.chip, styles.newChip, { backgroundColor: chipBg, borderColor: border }]}
+				<Chip
+					icon="plus"
 					onPress={onNewSession}
+					compact
+					style={styles.chip}
 				>
-					<Text style={[styles.newChipText, { color: text }]}>＋</Text>
-				</Pressable>
+					New
+				</Chip>
 			</ScrollView>
 		</View>
 	);
@@ -88,27 +78,6 @@ const styles = StyleSheet.create({
 		gap: 8,
 	},
 	chip: {
-		borderRadius: 20,
-		borderWidth: StyleSheet.hairlineWidth,
-		paddingHorizontal: 14,
-		paddingVertical: 6,
-		alignItems: 'center',
-		maxWidth: 120,
-	},
-	chipLabel: {
-		fontSize: 13,
-		fontWeight: '500',
-	},
-	chipModel: {
-		fontSize: 10,
-		marginTop: 1,
-	},
-	newChip: {
-		paddingHorizontal: 14,
-		paddingVertical: 6,
-	},
-	newChipText: {
-		fontSize: 18,
-		lineHeight: 22,
+		maxWidth: 160,
 	},
 });

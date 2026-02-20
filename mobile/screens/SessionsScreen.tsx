@@ -3,8 +3,8 @@ import {
 	StyleSheet,
 	KeyboardAvoidingView,
 	Platform,
-	useColorScheme,
 } from 'react-native';
+import { useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppContext } from '../AppContext';
 import { ChatArea } from '../components/ChatArea';
@@ -16,7 +16,7 @@ import { SessionStrip } from '../components/SessionStrip';
 import type { Session } from '../types';
 
 export function SessionsScreen() {
-	const isDark = useColorScheme() === 'dark';
+	const theme = useTheme();
 	const insets = useSafeAreaInsets();
 	const [actionSession, setActionSession] = useState<Session | null>(null);
 
@@ -62,7 +62,7 @@ export function SessionsScreen() {
 
 	return (
 		<KeyboardAvoidingView
-			style={[styles.container, { backgroundColor: isDark ? '#000' : '#f5f5f5' }]}
+			style={[styles.container, { backgroundColor: theme.colors.background }]}
 			behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
 		>
 			<Header
@@ -86,7 +86,7 @@ export function SessionsScreen() {
 						loading={loading}
 						loadingMessages={loadingMessages}
 						error={error}
-					onDismissError={dismissError}
+						onDismissError={dismissError}
 						scrollRef={scrollRef}
 						showScrollButton={showScrollButton}
 						onScrollToBottom={() => {
