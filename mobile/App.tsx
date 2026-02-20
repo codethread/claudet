@@ -148,6 +148,15 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 		};
 	}, []);
 
+	// Scroll to bottom when switching sessions
+	useEffect(() => {
+		if (!currentSessionId) return;
+		const timer = setTimeout(() => {
+			scrollRef.current?.scrollToEnd({ animated: false });
+		}, 50);
+		return () => clearTimeout(timer);
+	}, [currentSessionId]);
+
 	// Fetch message history when switching to a session we haven't loaded yet
 	useEffect(() => {
 		if (!currentSessionId) return;
@@ -164,6 +173,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 						next.set(currentSessionId, messages);
 						return next;
 					});
+					setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 50);
 				}
 			})
 			.catch(() => {
