@@ -14,11 +14,22 @@ import {
 import { ChatMessage } from './ChatMessage';
 import type { Message } from '../types';
 
+function friendlyError(raw: string): string {
+	const lower = raw.toLowerCase();
+	if (lower.includes('rate limit') || lower.includes('429') || lower.includes('too many requests')) {
+		return 'Rate limit reached — please wait a moment before sending another message.';
+	}
+	// Strip the leading "Error: Claude exited with code N: " prefix if present
+	const match = raw.match(/claude exited with code \d+:\s*([\s\S]+)/i);
+	return match ? match[1].trim() : raw.replace(/^Error:\s*/i, '');
+}
+
 interface Props {
 	messages: Message[];
 	loading: boolean;
 	loadingMessages: boolean;
 	error: string | null;
+	onDismissError: () => void;
 	scrollRef: React.RefObject<ScrollView | null>;
 	showScrollButton: boolean;
 	onScrollToBottom: () => void;
@@ -31,6 +42,7 @@ export function ChatArea({
 	loading,
 	loadingMessages,
 	error,
+	onDismissError,
 	scrollRef,
 	showScrollButton,
 	onScrollToBottom,
@@ -56,6 +68,17 @@ export function ChatArea({
 
 	return (
 		<>
+			{error ? (
+				<View style={styles.errorBanner}>
+					<Text style={styles.errorBannerText} numberOfLines={3}>
+						⚠ {friendlyError(error)}
+					</Text>
+					<Pressable onPress={onDismissError} hitSlop={8} style={styles.errorDismiss}>
+						<Text style={styles.errorDismissText}>✕</Text>
+					</Pressable>
+				</View>
+			) : null}
+
 			<ScrollView
 				ref={scrollRef}
 				style={styles.scroll}
@@ -80,8 +103,7 @@ export function ChatArea({
 						<Text style={[styles.loadingText, { color: loadingColor }]}>Thinking...</Text>
 					</View>
 				)}
-				{error && <Text style={styles.errorText}>{error}</Text>}
-			</ScrollView>
+				</ScrollView>
 
 			{showScrollButton && (
 				<Animated.View
@@ -151,5 +173,27 @@ const styles = StyleSheet.create({
 		fontSize: 20,
 		fontWeight: '700',
 		lineHeight: 24,
+	},
+	errorBanner: {
+		flexDirection: 'row',
+		alignItems: 'flex-start',
+		backgroundColor: '#3a0000',
+		paddingHorizontal: 14,
+		paddingVertical: 10,
+		gap: 8,
+	},
+	errorBannerText: {
+		flex: 1,
+		color: '#ff6b6b',
+		fontSize: 13,
+		lineHeight: 18,
+	},
+	errorDismiss: {
+		paddingTop: 1,
+	},
+	errorDismissText: {
+		color: '#ff6b6b',
+		fontSize: 15,
+		fontWeight: '700',
 	},
 });

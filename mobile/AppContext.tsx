@@ -19,6 +19,7 @@ export interface AppState {
 	projects: Project[];
 	currentProjectId: string | null;
 	// Handlers
+	dismissError: () => void;
 	setInput: (v: string) => void;
 	setCurrentSessionId: (id: string | null) => void;
 	setSelectedModel: (m: string) => void;
@@ -48,6 +49,7 @@ const defaultState: AppState = {
 	baseDir: null,
 	projects: [],
 	currentProjectId: null,
+	dismissError: () => {},
 	setInput: () => {},
 	setCurrentSessionId: () => {},
 	setSelectedModel: () => {},

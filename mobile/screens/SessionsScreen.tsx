@@ -40,6 +40,7 @@ export function SessionsScreen() {
 		handleNewSession,
 		handleRenameSession,
 		handleDeleteSession,
+		dismissError,
 		send,
 		onScroll,
 	} = useAppContext();
@@ -85,6 +86,7 @@ export function SessionsScreen() {
 						loading={loading}
 						loadingMessages={loadingMessages}
 						error={error}
+					onDismissError={dismissError}
 						scrollRef={scrollRef}
 						showScrollButton={showScrollButton}
 						onScrollToBottom={() => {

@@ -221,6 +221,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				baseDir,
 				projects,
 				currentProjectId,
+				dismissError: () => setError(null),
 				setInput,
 				setCurrentSessionId,
 				setSelectedModel,
