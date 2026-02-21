@@ -11,7 +11,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import * as Burnt from 'burnt';
+let Burnt: typeof import('burnt') | null = null;
+try { Burnt = require('burnt'); } catch { /* native module not available in this build */ }
 import {
 	fetchSessions,
 	fetchModels,
@@ -99,7 +100,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 	const handleRenameSession = useCallback(async (id: string, name: string) => {
 		const updated = await apiUpdateSession(id, { name });
 		setSessions((prev) => prev.map((s) => (s.id === id ? updated : s)));
-		Burnt.toast({ title: 'Session renamed', preset: 'done', duration: 2 });
+		Burnt?.toast({ title: 'Session renamed', preset: 'done', duration: 2 });
 	}, []);
 
 	const handleDeleteSession = useCallback(
@@ -107,7 +108,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 			await apiDeleteSession(id);
 			setSessions((prev) => prev.filter((s) => s.id !== id));
 			if (currentSessionId === id) setCurrentSessionId(null);
-			Burnt.toast({ title: 'Session deleted', preset: 'done', duration: 2 });
+			Burnt?.toast({ title: 'Session deleted', preset: 'done', duration: 2 });
 		},
 		[currentSessionId],
 	);
