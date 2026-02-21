@@ -43,7 +43,7 @@ Skip steps 1-2 and 6 from the Complex Workflow. Proceed directly to:
 ## [ALL AGENTS] Rules
 
 - ALWAYS update [docs/architecture.md](./docs/architecture.md) with up-to-date information after architectural changes
-- Use `npm` for all package management operations (see Runtime & Tooling below)
+- Use `npm` for all package management operations (run from within `server/` or `mobile/`)
 - Follow test-driven development when writing code
 
 ## Documentation
@@ -51,35 +51,35 @@ Skip steps 1-2 and 6 from the Complex Workflow. Proceed directly to:
 - **[docs/architecture.md](./docs/architecture.md)** - Complete architecture, project structure, and technology stack (**ALWAYS read before starting any work.**)
 - **[README.md](./README.md)** - User-facing documentation with getting started guide
 
+## Repository Structure
+
+```
+server/   — Node.js/Express API server (npm, tsx, vitest)
+mobile/   — Expo/React Native app (npm)
+Makefile  — Convenience targets delegating into server/ and mobile/
+```
+
 ## Runtime & Tooling
 
-This project uses **Node.js** (via `tsx`) as the runtime and **npm** as the package manager.
-
-Key points:
-
-- Use `npm` for package management
-- Use `npm test` for testing (Vitest)
-- Use `tsx` for TypeScript execution (installed locally, invoked via npm scripts)
-- Server uses Express v5, better-sqlite3 for SQLite, Node.js `child_process` for spawning
+- **Server:** Node.js via `tsx`, npm, Express v5, better-sqlite3, Vitest
+- **Mobile:** Expo / React Native, npm
+- Run server commands from `server/`, mobile commands from `mobile/`, or use `make` from root
 
 ## Quick Reference: Development Commands
 
 ```bash
-# Development
-npm run dev                       # Start dev server (port 3001, hot reload)
-npm run dev:test                  # Start dev server with fake Claude responses
-npm start                         # Production server
+# From root (via Makefile)
+make dev          # Start server (port 3001, hot reload)
+make dev-test     # Start server with fake Claude responses
+make test         # Run unit tests
+make validate     # Run all checks
+make mobile       # Start Expo dev server
 
-# Code Quality
-npm run format                    # Format code with Biome
-npm run format:check              # Check code formatting
-npm run lint                      # Lint code with Biome
-npm run lint:fix                  # Lint and fix issues
-npm run type-check                # TypeScript type checking
+# From server/
+npm run dev
+npm test
+npm run validate
 
-# Testing
-npm test                          # Run unit tests (vitest)
-
-# Final Validation
-npm run validate                  # Run all checks (type-check, format:check, lint)
+# From mobile/
+npx expo start
 ```

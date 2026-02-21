@@ -1,3 +1,0 @@
-[test]
-# Exclude Playwright E2E tests from bun test (no longer applies, kept for safety)
-exclude = ["./tests/**/*"]

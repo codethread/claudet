@@ -120,20 +120,24 @@ mobile/
 ## Project Structure
 
 ```
-src/
-├── backend/
+server/                            # Node.js/Express API server
+├── src/backend/
 │   ├── index.tsx                  # Production entry point
 │   ├── index.test-server.tsx      # Test entry point (sets CLAUDE_TEST_FAKE=true)
-│   ├── server.ts                  # Bun.serve HTTP server on port 3001
+│   ├── server.ts                  # Express v5 HTTP server on port 3001
 │   ├── claude.ts                  # Claude CLI interface (--print / --resume)
+│   ├── db.ts                      # SQLite via better-sqlite3
 │   ├── settings.ts                # ~/.claudet/config.json read/write + baseDir validation
 │   ├── projects.ts                # Git repo discovery (discoverProjects)
 │   ├── utils/
 │   │   └── network.ts             # Local IP detection
 │   └── audio/
-│       └── transcription.ts       # Audio transcription via whisper (kept for future mobile audio)
+│       └── transcription.ts       # Audio transcription via whisper (future mobile audio)
+├── package.json                   # npm dependencies + scripts
+├── tsconfig.json                  # TypeScript config (bundler mode for tsx)
+└── biome.json                     # Biome linter/formatter config
 
-mobile/                            # React Native Expo app (Node.js/npm, separate from Bun project)
+mobile/                            # React Native Expo app
 ├── App.tsx                        # Main application component
 ├── api.ts                         # HTTP API client
 ├── types.ts                       # Shared types
@@ -144,8 +148,8 @@ mobile/                            # React Native Expo app (Node.js/npm, separat
     ├── ChatMessage.tsx            # Markdown chat bubble
     └── SettingsDrawer.tsx         # Settings modal drawer
 
+Makefile                           # Convenience targets (make dev, make mobile, etc.)
 docs/
-├── bun.md                         # Bun guidelines (important reference)
 └── architecture.md                # This file
 ```
 
@@ -172,20 +176,24 @@ npm test        # Run all unit tests
 ## Development Commands
 
 ```bash
-# Backend
-npm run dev                # Start HTTP API server on port 3001 (hot reload via tsx watch)
-npm run dev:test           # Start with fake Claude responses (CLAUDE_TEST_FAKE=true)
-npm start                  # Production server
+# From repo root (via Makefile)
+make dev          # Start API server (port 3001, hot reload)
+make dev-test     # Start server with fake Claude responses
+make start        # Production server
+make test         # Run unit tests
+make validate     # type-check + format:check + lint
+make mobile       # Start Expo dev server
+make mobile-ios   # Open in iOS simulator
+make mobile-android # Open in Android emulator
 
-# Code quality
-npm run format             # Format with Biome
-npm run format:check       # Check formatting
-npm run lint               # Lint with Biome
-npm run type-check         # TypeScript check (backend only)
-npm run validate           # Run all checks
+# From server/ directly
+npm run dev
+npm run dev:test
+npm start
+npm test
+npm run type-check
+npm run validate
 
-# Mobile (in mobile/ directory)
-npm start                  # Start Expo dev server
-npm run ios                # Open in iOS simulator
-npm run android            # Open in Android emulator
+# From mobile/ directly
+npx expo start
 ```
