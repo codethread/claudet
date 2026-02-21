@@ -1,65 +1,48 @@
-import { View, StyleSheet } from 'react-native';
-import { TextInput, IconButton, useTheme } from 'react-native-paper';
+import { View, TextInput, Pressable, Text, useColorScheme } from 'react-native';
 
 interface Props {
-	input: string;
-	onChangeInput: (text: string) => void;
-	onSend: () => void;
-	editable: boolean;
-	canSend: boolean;
-	bottomInset: number;
+  input: string;
+  onChangeInput: (text: string) => void;
+  onSend: () => void;
+  editable: boolean;
+  canSend: boolean;
+  bottomInset: number;
 }
 
 export function InputBar({ input, onChangeInput, onSend, editable, canSend, bottomInset }: Props) {
-	const theme = useTheme();
-	return (
-		<View
-			style={[
-				styles.row,
-				{
-					backgroundColor: theme.colors.surface,
-					borderTopColor: theme.colors.outline,
-					paddingBottom: 12 + bottomInset,
-				},
-			]}
-		>
-			<TextInput
-				style={styles.input}
-				mode="outlined"
-				value={input}
-				onChangeText={onChangeInput}
-				placeholder="Type a message..."
-				multiline
-				editable={editable}
-				dense
-				outlineStyle={{ borderRadius: 20 }}
-			/>
-			<IconButton
-				icon="send"
-				mode="contained"
-				onPress={onSend}
-				disabled={!canSend}
-				size={22}
-				style={styles.sendButton}
-			/>
-		</View>
-	);
-}
+  const isDark = useColorScheme() === 'dark';
 
-const styles = StyleSheet.create({
-	row: {
-		flexDirection: 'row',
-		alignItems: 'flex-end',
-		paddingTop: 8,
-		paddingHorizontal: 12,
-		gap: 4,
-		borderTopWidth: StyleSheet.hairlineWidth,
-	},
-	input: {
-		flex: 1,
-		maxHeight: 120,
-	},
-	sendButton: {
-		marginBottom: 2,
-	},
-});
+  return (
+    <View
+      className={`flex-row items-end px-3 pt-2 gap-2 border-t ${
+        isDark
+          ? 'bg-black border-zinc-800'
+          : 'bg-white border-gray-200'
+      }`}
+      style={{ paddingBottom: 12 + bottomInset }}
+    >
+      <TextInput
+        className={`flex-1 min-h-[40px] max-h-[120px] rounded-full px-4 py-[10px] text-[15px] ${
+          isDark ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-black'
+        }`}
+        value={input}
+        onChangeText={onChangeInput}
+        placeholder="Message..."
+        placeholderTextColor={isDark ? '#636366' : '#8e8e93'}
+        multiline
+        editable={editable}
+      />
+      <Pressable
+        onPress={onSend}
+        disabled={!canSend}
+        className={`w-[36px] h-[36px] rounded-full items-center justify-center mb-[2px] ${
+          canSend ? 'bg-[#007AFF]' : isDark ? 'bg-zinc-700' : 'bg-gray-200'
+        }`}
+      >
+        <Text className={`text-[18px] font-bold ${canSend ? 'text-white' : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+          ↑
+        </Text>
+      </Pressable>
+    </View>
+  );
+}

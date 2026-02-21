@@ -1,64 +1,50 @@
-import { View, StyleSheet } from 'react-native';
-import { Surface, useTheme } from 'react-native-paper';
+import { View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
+import { useColorScheme } from 'react-native';
 import type { Message } from '../types';
 
 interface Props {
-	message: Message;
+  message: Message;
 }
 
 export function ChatMessage({ message }: Props) {
-	const theme = useTheme();
-	const isUser = message.role === 'user';
+  const isDark = useColorScheme() === 'dark';
+  const isUser = message.role === 'user';
 
-	const userMarkdownStyles = {
-		body: { color: '#fff', fontSize: 15, lineHeight: 22 },
-		code_inline: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 4 },
-		fence: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: 10 },
-		code_block: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: 10 },
-		link: { color: '#cce0ff' },
-	};
+  const userMarkdownStyles = {
+    body: { color: '#ffffff', fontSize: 15, lineHeight: 22 },
+    code_inline: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 4, color: '#ffffff' },
+    fence: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: 10, color: '#ffffff' },
+    code_block: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: 10, color: '#ffffff' },
+    link: { color: '#cce0ff' },
+    strong: { color: '#ffffff' },
+    em: { color: '#ffffff' },
+  };
 
-	const assistantMarkdownStyles = {
-		body: { color: theme.colors.onSurface, fontSize: 15, lineHeight: 22 },
-		code_inline: { backgroundColor: theme.colors.surfaceVariant, borderRadius: 4, paddingHorizontal: 4 },
-		fence: { backgroundColor: theme.dark ? '#1c1c1e' : '#f0f0f0', borderRadius: 8, padding: 10 },
-		code_block: { backgroundColor: theme.dark ? '#1c1c1e' : '#f0f0f0', borderRadius: 8, padding: 10 },
-		link: { color: theme.colors.primary },
-	};
+  const assistantMarkdownStyles = {
+    body: { color: isDark ? '#ffffff' : '#000000', fontSize: 15, lineHeight: 22 },
+    code_inline: { backgroundColor: isDark ? '#3a3a3c' : '#f0f0f0', borderRadius: 4, paddingHorizontal: 4, color: isDark ? '#e0e0e0' : '#000000' },
+    fence: { backgroundColor: isDark ? '#1c1c1e' : '#f5f5f5', borderRadius: 8, padding: 10, color: isDark ? '#e0e0e0' : '#000000' },
+    code_block: { backgroundColor: isDark ? '#1c1c1e' : '#f5f5f5', borderRadius: 8, padding: 10, color: isDark ? '#e0e0e0' : '#000000' },
+    link: { color: isDark ? '#64b5f6' : '#007AFF' },
+  };
 
-	return (
-		<View style={[styles.row, isUser ? styles.rowEnd : styles.rowStart]}>
-			{isUser ? (
-				<View style={[styles.bubble, { backgroundColor: theme.colors.primary }]}>
-					<Markdown style={userMarkdownStyles}>{message.content}</Markdown>
-				</View>
-			) : (
-				<Surface style={styles.bubble} elevation={1}>
-					<Markdown style={assistantMarkdownStyles}>{message.content}</Markdown>
-				</Surface>
-			)}
-		</View>
-	);
+  return (
+    <View className={`flex-row my-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <View
+        className={[
+          'max-w-[95%] px-[14px] py-[10px] shrink',
+          isUser
+            ? 'bg-[#007AFF] rounded-[18px] rounded-br-[4px]'
+            : isDark
+              ? 'bg-zinc-800 border border-zinc-700 rounded-[18px] rounded-bl-[4px]'
+              : 'bg-white border border-gray-200 rounded-[18px] rounded-bl-[4px]',
+        ].join(' ')}
+      >
+        <Markdown style={isUser ? userMarkdownStyles : assistantMarkdownStyles}>
+          {message.content}
+        </Markdown>
+      </View>
+    </View>
+  );
 }
-
-const styles = StyleSheet.create({
-	row: {
-		flexDirection: 'row',
-		marginVertical: 4,
-	},
-	rowEnd: {
-		justifyContent: 'flex-end',
-	},
-	rowStart: {
-		justifyContent: 'flex-start',
-	},
-	bubble: {
-		maxWidth: 600,
-		width: '95%',
-		paddingHorizontal: 14,
-		paddingVertical: 10,
-		borderRadius: 18,
-		flexShrink: 1,
-	},
-});

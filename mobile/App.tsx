@@ -10,7 +10,7 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { PaperProvider, MD3DarkTheme, MD3LightTheme, useTheme, Icon } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
 	fetchSessions,
 	fetchModels,
@@ -28,16 +28,6 @@ import { AppContext } from './AppContext';
 import { SessionsScreen } from './screens/SessionsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import type { Message, PermissionMode, Project, Session } from './types';
-
-const LightTheme = {
-	...MD3LightTheme,
-	colors: { ...MD3LightTheme.colors, primary: '#007AFF' },
-};
-
-const DarkTheme = {
-	...MD3DarkTheme,
-	colors: { ...MD3DarkTheme.colors, primary: '#0a84ff' },
-};
 
 const Tab = createBottomTabNavigator();
 
@@ -264,20 +254,20 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 }
 
 function TabBar() {
-	const theme = useTheme();
+	const isDark = useColorScheme() === 'dark';
 
 	return (
 		<Tab.Navigator
 			screenOptions={{
 				headerShown: false,
 				tabBarStyle: {
-					backgroundColor: theme.colors.surface,
-					borderTopColor: theme.colors.outline,
+					backgroundColor: isDark ? '#000000' : '#ffffff',
+					borderTopColor: isDark ? '#38383a' : '#c6c6c8',
 					borderTopWidth: StyleSheet.hairlineWidth,
 				},
-				tabBarActiveTintColor: theme.colors.primary,
-				tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-				tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
+				tabBarActiveTintColor: isDark ? '#0a84ff' : '#007AFF',
+				tabBarInactiveTintColor: isDark ? '#636366' : '#8e8e93',
+				tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
 			}}
 		>
 			<Tab.Screen
@@ -286,7 +276,7 @@ function TabBar() {
 				options={{
 					tabBarLabel: 'Sessions',
 					tabBarIcon: ({ color, size }) => (
-						<Icon source="chat-processing-outline" size={size} color={color} />
+						<MaterialCommunityIcons name="chat-processing-outline" size={size} color={color} />
 					),
 				}}
 			/>
@@ -296,7 +286,7 @@ function TabBar() {
 				options={{
 					tabBarLabel: 'Settings',
 					tabBarIcon: ({ color, size }) => (
-						<Icon source="cog-outline" size={size} color={color} />
+						<MaterialCommunityIcons name="cog-outline" size={size} color={color} />
 					),
 				}}
 			/>
@@ -306,18 +296,15 @@ function TabBar() {
 
 export default function App() {
 	const colorScheme = useColorScheme();
-	const theme = colorScheme === 'dark' ? DarkTheme : LightTheme;
 
 	return (
 		<SafeAreaProvider>
-			<PaperProvider theme={theme}>
-				<AppStateProvider>
-					<NavigationContainer>
-						<StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-						<TabBar />
-					</NavigationContainer>
-				</AppStateProvider>
-			</PaperProvider>
+			<AppStateProvider>
+				<NavigationContainer>
+					<StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+					<TabBar />
+				</NavigationContainer>
+			</AppStateProvider>
 		</SafeAreaProvider>
 	);
 }
