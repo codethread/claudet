@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   useColorScheme,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppContext } from '../AppContext';
 import { ChatArea } from '../components/ChatArea';
@@ -78,6 +78,7 @@ export function SessionsScreen() {
             onSelectSession={setCurrentSessionId}
             onNewSession={handleNewSession}
             onLongPressSession={(s) => setActionSession(s)}
+            onDeleteSession={(s) => void handleDeleteSession(s.id)}
           />
 
           <ChatArea

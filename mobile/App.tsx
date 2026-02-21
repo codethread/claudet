@@ -1,7 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-	type ScrollView,
 	type NativeSyntheticEvent,
 	type NativeScrollEvent,
 	useColorScheme,
@@ -11,6 +10,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import * as Burnt from 'burnt';
 import {
 	fetchSessions,
 	fetchModels,
@@ -25,6 +26,7 @@ import {
 	SERVER_URL,
 } from './api';
 import { AppContext } from './AppContext';
+import type { ScrollHandle } from './AppContext';
 import { SessionsScreen } from './screens/SessionsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import type { Message, PermissionMode, Project, Session } from './types';
@@ -47,7 +49,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
 
-	const scrollRef = useRef<ScrollView>(null);
+	const scrollRef = useRef<ScrollHandle>(null);
 	const fetchedSessionsRef = useRef<Set<string>>(new Set());
 	const isNearBottomRef = useRef(true);
 
@@ -97,6 +99,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 	const handleRenameSession = useCallback(async (id: string, name: string) => {
 		const updated = await apiUpdateSession(id, { name });
 		setSessions((prev) => prev.map((s) => (s.id === id ? updated : s)));
+		Burnt.toast({ title: 'Session renamed', preset: 'done', duration: 2 });
 	}, []);
 
 	const handleDeleteSession = useCallback(
@@ -104,6 +107,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 			await apiDeleteSession(id);
 			setSessions((prev) => prev.filter((s) => s.id !== id));
 			if (currentSessionId === id) setCurrentSessionId(null);
+			Burnt.toast({ title: 'Session deleted', preset: 'done', duration: 2 });
 		},
 		[currentSessionId],
 	);
@@ -139,6 +143,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 						`Failed to connect to ${SERVER_URL}: ${e instanceof Error ? e.message : 'Unknown error'}`,
 					);
 					setConnected(false);
+					// No toast here — the persistent error banner handles this
 				}
 			}
 		}
@@ -300,10 +305,12 @@ export default function App() {
 	return (
 		<SafeAreaProvider>
 			<AppStateProvider>
-				<NavigationContainer>
-					<StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-					<TabBar />
-				</NavigationContainer>
+				<KeyboardProvider>
+					<NavigationContainer>
+						<StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+						<TabBar />
+					</NavigationContainer>
+				</KeyboardProvider>
 			</AppStateProvider>
 		</SafeAreaProvider>
 	);

@@ -2,7 +2,6 @@ import { useRef, useEffect } from 'react';
 import {
   Animated,
   View,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   Text,
@@ -10,8 +9,10 @@ import {
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { ChatMessage } from './ChatMessage';
 import type { Message } from '../types';
+import type { ScrollHandle } from '../AppContext';
 
 function friendlyError(raw: string): string {
   const lower = raw.toLowerCase();
@@ -28,7 +29,7 @@ interface Props {
   loadingMessages: boolean;
   error: string | null;
   onDismissError: () => void;
-  scrollRef: React.RefObject<ScrollView | null>;
+  scrollRef: React.RefObject<ScrollHandle | null>;
   showScrollButton: boolean;
   onScrollToBottom: () => void;
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
@@ -74,33 +75,44 @@ export function ChatArea({
         </View>
       ) : null}
 
-      <ScrollView
-        ref={scrollRef}
-        className="flex-1"
-        contentContainerStyle={{ padding: 16, gap: 4 }}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        onScroll={onScroll}
-        scrollEventThrottle={100}
-      >
-        {messages.length === 0 && !error && (
-          <Text className={`text-center mt-10 text-[15px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-            {loadingMessages ? 'Loading messages…' : 'Send a message to start chatting'}
-          </Text>
-        )}
-        {messages.map((msg, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: messages are append-only, index is stable
-          <ChatMessage key={i} message={msg} />
-        ))}
-        {loading && (
-          <View className="flex-row items-center gap-2 py-1 self-start">
-            <ActivityIndicator size="small" color={isDark ? '#8e8e93' : '#666'} />
-            <Text className={`text-[14px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-              Thinking...
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      <View className="flex-1">
+        <FlashList
+          ref={(ref) => {
+            // FlashList's ref is compatible with ScrollHandle (has scrollToEnd)
+            (scrollRef as React.RefObject<any>).current = ref;
+          }}
+          data={messages}
+          renderItem={({ item, index }) => (
+            <ChatMessage key={index} message={item} />
+          )}
+          keyExtractor={(_, index) => String(index)}
+          contentContainerStyle={{ padding: 16 }}
+          ItemSeparatorComponent={() => <View style={{ height: 4 }} />}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onScroll={onScroll}
+          scrollEventThrottle={100}
+          ListEmptyComponent={
+            !error ? (
+              <Text
+                className={`text-center mt-10 text-[15px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}
+              >
+                {loadingMessages ? 'Loading messages…' : 'Send a message to start chatting'}
+              </Text>
+            ) : null
+          }
+          ListFooterComponent={
+            loading ? (
+              <View className="flex-row items-center gap-2 py-1 self-start">
+                <ActivityIndicator size="small" color={isDark ? '#8e8e93' : '#666'} />
+                <Text className={`text-[14px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  Thinking...
+                </Text>
+              </View>
+            ) : null
+          }
+        />
+      </View>
 
       {showScrollButton && (
         <Animated.View

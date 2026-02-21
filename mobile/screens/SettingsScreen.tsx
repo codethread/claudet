@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import {
   View,
   Text,
@@ -159,7 +160,10 @@ export function SettingsScreen() {
                 projects.map((project, i) => (
                   <Pressable
                     key={project.id}
-                    onPress={() => handleSelectProject(project.id)}
+                    onPress={() => {
+                      void Haptics.selectionAsync();
+                      handleSelectProject(project.id);
+                    }}
                     className={`${rowClass} ${i === projects.length - 1 ? 'border-b-0' : ''}`}
                   >
                     <View className="flex-1 mr-3">
@@ -182,7 +186,10 @@ export function SettingsScreen() {
           {['haiku', 'sonnet'].map((model, i) => (
             <Pressable
               key={model}
-              onPress={() => setSelectedModel(model)}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                setSelectedModel(model);
+              }}
               className={`${rowClass} ${i === 1 ? 'border-b-0' : ''}`}
             >
               <Text className={titleClass}>{model.charAt(0).toUpperCase() + model.slice(1)}</Text>

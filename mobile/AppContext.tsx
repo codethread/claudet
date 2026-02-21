@@ -1,7 +1,11 @@
 import { createContext, useContext } from 'react';
 import type { RefObject } from 'react';
-import type { ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import type { Message, PermissionMode, Project, Session } from './types';
+
+export type ScrollHandle = {
+	scrollToEnd: (params?: { animated?: boolean }) => void;
+};
 
 export interface AppState {
 	// Data
@@ -30,7 +34,7 @@ export interface AppState {
 	handleRenameSession: (id: string, name: string) => Promise<void>;
 	handleDeleteSession: (id: string) => Promise<void>;
 	send: () => Promise<void>;
-	scrollRef: RefObject<ScrollView | null>;
+	scrollRef: RefObject<ScrollHandle | null>;
 	setShowScrollButton: (v: boolean) => void;
 	onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }

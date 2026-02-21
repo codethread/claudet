@@ -1,4 +1,5 @@
 import { View, TextInput, Pressable, Text, useColorScheme } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 interface Props {
   input: string;
@@ -33,7 +34,10 @@ export function InputBar({ input, onChangeInput, onSend, editable, canSend, bott
         editable={editable}
       />
       <Pressable
-        onPress={onSend}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onSend();
+        }}
         disabled={!canSend}
         className={`w-[36px] h-[36px] rounded-full items-center justify-center mb-[2px] ${
           canSend ? 'bg-[#007AFF]' : isDark ? 'bg-zinc-700' : 'bg-gray-200'
