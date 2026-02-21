@@ -1,5 +1,4 @@
 import { ScrollView, View, Text, Pressable, useColorScheme } from 'react-native';
-import * as ContextMenu from 'zeego/context-menu';
 import * as Haptics from 'expo-haptics';
 import type { Session } from '../types';
 
@@ -20,7 +19,6 @@ interface Props {
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onLongPressSession: (session: Session) => void;
-  onDeleteSession: (session: Session) => void;
 }
 
 export function SessionStrip({
@@ -29,7 +27,6 @@ export function SessionStrip({
   onSelectSession,
   onNewSession,
   onLongPressSession,
-  onDeleteSession,
 }: Props) {
   const isDark = useColorScheme() === 'dark';
 
@@ -45,55 +42,32 @@ export function SessionStrip({
         {sessions.map((session) => {
           const active = session.id === currentSessionId;
           return (
-            <ContextMenu.Root key={session.id}>
-              <ContextMenu.Trigger>
-                <Pressable
-                  onPress={() => {
-                    void Haptics.selectionAsync();
-                    onSelectSession(session.id);
-                  }}
-                  className={[
-                    'rounded-full px-4 py-[6px] items-center max-w-[140px]',
-                    active
-                      ? isDark ? 'bg-[#0a84ff]' : 'bg-[#007AFF]'
-                      : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200',
-                  ].join(' ')}
-                >
-                  <Text
-                    className={`text-[13px] font-medium ${active ? 'text-white' : isDark ? 'text-white' : 'text-black'}`}
-                    numberOfLines={1}
-                  >
-                    {sessionLabel(session)}
-                  </Text>
-                  <Text
-                    className={`text-[10px] mt-[1px] ${active ? 'text-blue-100' : isDark ? 'text-zinc-400' : 'text-gray-400'}`}
-                  >
-                    {session.model}
-                  </Text>
-                </Pressable>
-              </ContextMenu.Trigger>
-              <ContextMenu.Content>
-                <ContextMenu.Item
-                  key="rename"
-                  onSelect={() => onLongPressSession(session)}
-                >
-                  <ContextMenu.ItemTitle>Rename</ContextMenu.ItemTitle>
-                  <ContextMenu.ItemIcon
-                    ios={{ name: 'pencil', pointSize: 16 }}
-                  />
-                </ContextMenu.Item>
-                <ContextMenu.Item
-                  key="delete"
-                  destructive
-                  onSelect={() => onDeleteSession(session)}
-                >
-                  <ContextMenu.ItemTitle>Delete</ContextMenu.ItemTitle>
-                  <ContextMenu.ItemIcon
-                    ios={{ name: 'trash', pointSize: 16 }}
-                  />
-                </ContextMenu.Item>
-              </ContextMenu.Content>
-            </ContextMenu.Root>
+            <Pressable
+              key={session.id}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                onSelectSession(session.id);
+              }}
+              onLongPress={() => onLongPressSession(session)}
+              className={[
+                'rounded-full px-4 py-[6px] items-center max-w-[140px]',
+                active
+                  ? isDark ? 'bg-[#0a84ff]' : 'bg-[#007AFF]'
+                  : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200',
+              ].join(' ')}
+            >
+              <Text
+                className={`text-[13px] font-medium ${active ? 'text-white' : isDark ? 'text-white' : 'text-black'}`}
+                numberOfLines={1}
+              >
+                {sessionLabel(session)}
+              </Text>
+              <Text
+                className={`text-[10px] mt-[1px] ${active ? 'text-blue-100' : isDark ? 'text-zinc-400' : 'text-gray-400'}`}
+              >
+                {session.model}
+              </Text>
+            </Pressable>
           );
         })}
 
