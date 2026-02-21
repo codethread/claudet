@@ -4,10 +4,13 @@ This document provides a comprehensive overview of Claudet's architecture, techn
 
 ## Technology Stack
 
-- **Runtime:** [Bun](https://bun.sh) - All-in-one JavaScript runtime (backend only)
-- **Mobile:** [Expo](https://expo.dev/) / React Native (in `mobile/`) - Node.js + npm required (Bun lacks npm)
+- **Runtime:** [Node.js](https://nodejs.org) via [tsx](https://github.com/privatenumber/tsx) - TypeScript execution with watch mode
+- **HTTP Server:** [Express](https://expressjs.com) v5 (backend)
+- **Database:** [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - synchronous SQLite
+- **Package Manager:** npm (both root server and `mobile/` use npm)
+- **Mobile:** [Expo](https://expo.dev/) / React Native (in `mobile/`)
 - **AI Integration:** Claude Code CLI - `--print` / `--resume` invocations for stateless message handling
-- **Testing:** Bun test runner (unit tests for backend)
+- **Testing:** [Vitest](https://vitest.dev) (unit tests for backend)
 
 ## Server Architecture
 
@@ -15,7 +18,7 @@ This is a **Bun-native HTTP API server** using `Bun.serve()` with simple routing
 
 ### 1. Single HTTP Server (port 3001)
 
-A plain HTTP server serves as the API for the React Native mobile client.
+An Express v5 server serves as the API for the React Native mobile client.
 
 - **Port:** 3001 (HTTP, no TLS — avoids React Native dev cert friction)
 - CORS headers on all responses (`Access-Control-Allow-Origin: *`)
@@ -156,32 +159,32 @@ docs/
 
 ### Unit Tests
 
-Use `bun test` with the built-in test runner:
+Use `vitest` as the test runner:
 
 - Test files use `.test.ts` suffix (in `src/` directory)
-- Import from `bun:test`: `import { test, expect, describe } from "bun:test"`
+- Import from `vitest`: `import { test, expect, describe } from "vitest"`
 - Set `CLAUDE_TEST_FAKE=true` to skip real Claude CLI calls
 
 ```bash
-bun test        # Run all unit tests
+npm test        # Run all unit tests
 ```
 
 ## Development Commands
 
 ```bash
 # Backend
-bun dev                    # Start HTTP API server on port 3001 (hot reload)
-bun run dev:test           # Start with fake Claude responses (CLAUDE_TEST_FAKE=true)
-bun start                  # Production server
+npm run dev                # Start HTTP API server on port 3001 (hot reload via tsx watch)
+npm run dev:test           # Start with fake Claude responses (CLAUDE_TEST_FAKE=true)
+npm start                  # Production server
 
 # Code quality
-bun run format             # Format with Biome
-bun run format:check       # Check formatting
-bun run lint               # Lint with Biome
-bun run type-check         # TypeScript check (backend only)
-bun run validate           # Run all checks
+npm run format             # Format with Biome
+npm run format:check       # Check formatting
+npm run lint               # Lint with Biome
+npm run type-check         # TypeScript check (backend only)
+npm run validate           # Run all checks
 
-# Mobile (in mobile/ directory, uses npm)
+# Mobile (in mobile/ directory)
 npm start                  # Start Expo dev server
 npm run ios                # Open in iOS simulator
 npm run android            # Open in Android emulator

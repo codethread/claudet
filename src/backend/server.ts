@@ -1,3 +1,4 @@
+import express from 'express';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getLocalIP } from './utils/network';
@@ -19,206 +20,161 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-function corsJson(data: unknown, status = 200): Response {
-	return Response.json(data, { status, headers: CORS_HEADERS });
-}
-
 export function startServer() {
-	const server = Bun.serve({
-		hostname: '0.0.0.0',
-		port: 3001,
+	const app = express();
+	app.use(express.json());
 
-		routes: {
-			'/api/models': {
-				OPTIONS(_req) {
-					return new Response(null, { status: 204, headers: CORS_HEADERS });
-				},
-				GET(_req) {
-					return corsJson({
-						models: ['haiku', 'sonnet'],
-						default: process.env.NODE_ENV === 'production' ? 'sonnet' : 'haiku',
-					});
-				},
-			},
-
-			'/api/settings': {
-				OPTIONS(_req) {
-					return new Response(null, { status: 204, headers: CORS_HEADERS });
-				},
-				GET(_req) {
-					const settings = loadSettings();
-					return corsJson(settings);
-				},
-				async POST(req) {
-					try {
-						const body = (await req.json().catch(() => ({}))) as { baseDir?: unknown };
-						const baseDir = validateBaseDir(body.baseDir);
-						const settings = { baseDir };
-						saveSettings(settings);
-						return corsJson(settings);
-					} catch (error) {
-						return corsJson(
-							{ error: error instanceof Error ? error.message : 'Invalid request' },
-							400,
-						);
-					}
-				},
-			},
-
-			'/api/projects': {
-				OPTIONS(_req) {
-					return new Response(null, { status: 204, headers: CORS_HEADERS });
-				},
-				GET(_req) {
-					const { baseDir } = loadSettings();
-					if (!baseDir) return corsJson({ projects: [] });
-					const basePath = join(homedir(), baseDir);
-					const projects = discoverProjects(basePath);
-					return corsJson({ projects });
-				},
-			},
-
-			'/api/sessions': {
-				OPTIONS(_req) {
-					return new Response(null, { status: 204, headers: CORS_HEADERS });
-				},
-				GET(req) {
-					const url = new URL(req.url);
-					const projectPath = url.searchParams.get('projectPath') ?? undefined;
-					const sessions = listSessions(projectPath).map((s) => ({
-						id: s.id,
-						model: s.model,
-						createdAt: s.createdAt.toISOString(),
-						projectPath: s.projectPath,
-						permissionMode: s.permissionMode,
-						name: s.name,
-					}));
-					return corsJson({ sessions });
-				},
-				async POST(req) {
-					const body = (await req.json().catch(() => ({}))) as {
-						model?: string;
-						projectPath?: unknown;
-						permissionMode?: unknown;
-					};
-					if (!body.projectPath || typeof body.projectPath !== 'string') {
-						return corsJson({ error: 'projectPath is required' }, 400);
-					}
-					const model = body.model === 'sonnet' ? 'sonnet' : 'haiku';
-					const permissionMode =
-						body.permissionMode === 'dangerouslySkipPermissions'
-							? ('dangerouslySkipPermissions' as const)
-							: ('allowEdits' as const);
-					const session = createSession(model, body.projectPath, permissionMode);
-					return corsJson({
-						id: session.id,
-						model: session.model,
-						createdAt: session.createdAt.toISOString(),
-						projectPath: session.projectPath,
-						permissionMode: session.permissionMode,
-						name: session.name,
-					});
-				},
-			},
-
-			'/api/chat': {
-				OPTIONS(_req) {
-					return new Response(null, { status: 204, headers: CORS_HEADERS });
-				},
-				async POST(req) {
-					try {
-						const body = (await req.json()) as { message?: string; sessionId?: string };
-						const { message, sessionId } = body;
-
-						if (!message || typeof message !== 'string') {
-							return corsJson({ error: 'message is required' }, 400);
-						}
-						if (!sessionId || typeof sessionId !== 'string') {
-							return corsJson({ error: 'sessionId is required' }, 400);
-						}
-
-						const response = await sendMessage(sessionId, message);
-						return corsJson({ response });
-					} catch (error) {
-						console.error('Error in /api/chat:', error);
-						return corsJson(
-							{ error: error instanceof Error ? error.message : 'Unknown error' },
-							500,
-						);
-					}
-				},
-			},
-		},
-
-		async fetch(req) {
-			if (req.method === 'OPTIONS') {
-				return new Response(null, { status: 204, headers: CORS_HEADERS });
-			}
-
-			const url = new URL(req.url);
-
-			// GET /api/sessions/:id/messages
-			const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
-			if (messagesMatch?.[1] && req.method === 'GET') {
-				const session = getSession(messagesMatch[1]);
-				if (!session) return corsJson({ error: 'Session not found' }, 404);
-				return corsJson({ messages: session.messages });
-			}
-
-			const sessionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
-
-			// PATCH /api/sessions/:id
-			if (sessionMatch?.[1] && req.method === 'PATCH') {
-				const id = sessionMatch[1];
-				const body = (await req.json().catch(() => ({}))) as {
-					permissionMode?: unknown;
-					name?: unknown;
-				};
-
-				if (body.permissionMode !== undefined) {
-					const mode =
-						body.permissionMode === 'dangerouslySkipPermissions'
-							? ('dangerouslySkipPermissions' as const)
-							: ('allowEdits' as const);
-					setSessionPermissionMode(id, mode);
-				}
-
-				if (typeof body.name === 'string' && body.name.trim()) {
-					renameSession(id, body.name.trim());
-				}
-
-				const session = getSession(id);
-				if (!session) return corsJson({ error: 'Session not found' }, 404);
-				return corsJson({
-					id: session.id,
-					model: session.model,
-					createdAt: session.createdAt.toISOString(),
-					projectPath: session.projectPath,
-					permissionMode: session.permissionMode,
-					name: session.name,
-				});
-			}
-
-			// DELETE /api/sessions/:id
-			if (sessionMatch?.[1] && req.method === 'DELETE') {
-				const deleted = deleteSession(sessionMatch[1]);
-				if (!deleted) return corsJson({ error: 'Session not found' }, 404);
-				return corsJson({ success: true });
-			}
-
-			return new Response('Not found', { status: 404, headers: CORS_HEADERS });
-		},
+	// Apply CORS headers and handle OPTIONS preflight on all routes
+	app.use((_req, res, next) => {
+		for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
+		if (_req.method === 'OPTIONS') return res.status(204).end();
+		next();
 	});
 
-	const localIP = getLocalIP();
+	app.get('/api/models', (_req, res) => {
+		res.json({
+			models: ['haiku', 'sonnet'],
+			default: process.env.NODE_ENV === 'production' ? 'sonnet' : 'haiku',
+		});
+	});
 
-	console.log(`\n${'='.repeat(50)}`);
-	console.log('🚀 Claudet API server running!');
-	console.log('='.repeat(50));
-	console.log(`\n📍 Local:   http://localhost:${server.port}`);
-	console.log(`📱 Network: http://${localIP}:${server.port}`);
-	console.log('\n📲 Start the Expo app in mobile/ and point it to the above URL');
-	console.log(`${'='.repeat(50)}\n`);
+	app.get('/api/settings', (_req, res) => {
+		res.json(loadSettings());
+	});
+
+	app.post('/api/settings', (req, res) => {
+		try {
+			const body = req.body as { baseDir?: unknown };
+			const baseDir = validateBaseDir(body.baseDir);
+			const settings = { baseDir };
+			saveSettings(settings);
+			res.json(settings);
+		} catch (error) {
+			res
+				.status(400)
+				.json({ error: error instanceof Error ? error.message : 'Invalid request' });
+		}
+	});
+
+	app.get('/api/projects', (_req, res) => {
+		const { baseDir } = loadSettings();
+		if (!baseDir) return res.json({ projects: [] });
+		const basePath = join(homedir(), baseDir);
+		const projects = discoverProjects(basePath);
+		return res.json({ projects });
+	});
+
+	app.get('/api/sessions', (req, res) => {
+		const projectPath = (req.query.projectPath as string | undefined) ?? undefined;
+		const sessions = listSessions(projectPath).map((s) => ({
+			id: s.id,
+			model: s.model,
+			createdAt: s.createdAt.toISOString(),
+			projectPath: s.projectPath,
+			permissionMode: s.permissionMode,
+			name: s.name,
+		}));
+		res.json({ sessions });
+	});
+
+	app.post('/api/sessions', (req, res) => {
+		const body = req.body as {
+			model?: string;
+			projectPath?: unknown;
+			permissionMode?: unknown;
+		};
+		if (!body.projectPath || typeof body.projectPath !== 'string') {
+			return res.status(400).json({ error: 'projectPath is required' });
+		}
+		const model = body.model === 'sonnet' ? 'sonnet' : 'haiku';
+		const permissionMode =
+			body.permissionMode === 'dangerouslySkipPermissions'
+				? ('dangerouslySkipPermissions' as const)
+				: ('allowEdits' as const);
+		const session = createSession(model, body.projectPath, permissionMode);
+		return res.json({
+			id: session.id,
+			model: session.model,
+			createdAt: session.createdAt.toISOString(),
+			projectPath: session.projectPath,
+			permissionMode: session.permissionMode,
+			name: session.name,
+		});
+	});
+
+	app.get('/api/sessions/:id/messages', (req, res) => {
+		const session = getSession(req.params.id as string);
+		if (!session) return res.status(404).json({ error: 'Session not found' });
+		return res.json({ messages: session.messages });
+	});
+
+	app.patch('/api/sessions/:id', (req, res) => {
+		const id = req.params.id as string;
+		const body = req.body as { permissionMode?: unknown; name?: unknown };
+
+		if (body.permissionMode !== undefined) {
+			const mode =
+				body.permissionMode === 'dangerouslySkipPermissions'
+					? ('dangerouslySkipPermissions' as const)
+					: ('allowEdits' as const);
+			setSessionPermissionMode(id, mode);
+		}
+
+		if (typeof body.name === 'string' && body.name.trim()) {
+			renameSession(id, body.name.trim());
+		}
+
+		const session = getSession(id);
+		if (!session) return res.status(404).json({ error: 'Session not found' });
+		return res.json({
+			id: session.id,
+			model: session.model,
+			createdAt: session.createdAt.toISOString(),
+			projectPath: session.projectPath,
+			permissionMode: session.permissionMode,
+			name: session.name,
+		});
+	});
+
+	app.delete('/api/sessions/:id', (req, res) => {
+		const deleted = deleteSession(req.params.id as string);
+		if (!deleted) return res.status(404).json({ error: 'Session not found' });
+		return res.json({ success: true });
+	});
+
+	app.post('/api/chat', async (req, res) => {
+		try {
+			const body = req.body as { message?: string; sessionId?: string };
+			const { message, sessionId } = body;
+
+			if (!message || typeof message !== 'string') {
+				return res.status(400).json({ error: 'message is required' });
+			}
+			if (!sessionId || typeof sessionId !== 'string') {
+				return res.status(400).json({ error: 'sessionId is required' });
+			}
+
+			const response = await sendMessage(sessionId, message);
+			return res.json({ response });
+		} catch (error) {
+			console.error('Error in /api/chat:', error);
+			return res
+				.status(500)
+				.json({ error: error instanceof Error ? error.message : 'Unknown error' });
+		}
+	});
+
+	const port = 3001;
+	const server = app.listen(port, '0.0.0.0', () => {
+		const localIP = getLocalIP();
+		console.log(`\n${'='.repeat(50)}`);
+		console.log('🚀 Claudet API server running!');
+		console.log('='.repeat(50));
+		console.log(`\n📍 Local:   http://localhost:${port}`);
+		console.log(`📱 Network: http://${localIP}:${port}`);
+		console.log('\n📲 Start the Expo app in mobile/ and point it to the above URL');
+		console.log(`${'='.repeat(50)}\n`);
+	});
 
 	return server;
 }

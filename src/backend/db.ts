@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -11,10 +11,10 @@ mkdirSync(dbDir, { recursive: true });
 
 const db = new Database(dbPath);
 
-db.run('PRAGMA journal_mode=WAL');
-db.run('PRAGMA foreign_keys=ON');
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     model TEXT NOT NULL,
@@ -27,12 +27,12 @@ db.run(`
 `);
 
 try {
-  db.run(`ALTER TABLE sessions ADD COLUMN name TEXT`);
+  db.exec(`ALTER TABLE sessions ADD COLUMN name TEXT`);
 } catch {
   // column already exists
 }
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -44,6 +44,7 @@ db.run(`
 export { db };
 
 // Prepared statements for performance
+// better-sqlite3 named params: SQL uses $name, caller passes { name: value } (no $ in key)
 const stmtInsertSession = db.prepare(`
   INSERT INTO sessions (id, model, created_at, project_path, permission_mode, message_count, name)
   VALUES ($id, $model, $created_at, $project_path, $permission_mode, $message_count, $name)
@@ -118,21 +119,21 @@ function rowToSession(row: SessionRow, messages: SessionMessage[] = []): Session
 
 export function dbCreateSession(session: Session): void {
 	stmtInsertSession.run({
-		$id: session.id,
-		$model: session.model,
-		$created_at: session.createdAt.toISOString(),
-		$project_path: session.projectPath,
-		$permission_mode: session.permissionMode,
-		$message_count: session.messageCount,
-		$name: session.name ?? null,
+		id: session.id,
+		model: session.model,
+		created_at: session.createdAt.toISOString(),
+		project_path: session.projectPath,
+		permission_mode: session.permissionMode,
+		message_count: session.messageCount,
+		name: session.name ?? null,
 	});
 }
 
 export function dbGetSession(id: string): Session | undefined {
-	const row = stmtGetSession.get({ $id: id }) as SessionRow | undefined;
+	const row = stmtGetSession.get({ id }) as SessionRow | undefined;
 	if (!row) return undefined;
 
-	const messageRows = stmtGetMessages.all({ $session_id: id }) as MessageRow[];
+	const messageRows = stmtGetMessages.all({ session_id: id }) as MessageRow[];
 	const messages: SessionMessage[] = messageRows.map((m) => ({
 		role: m.role as SessionMessage['role'],
 		content: m.content,
@@ -144,7 +145,7 @@ export function dbGetSession(id: string): Session | undefined {
 export function dbListSessions(projectPath?: string): Session[] {
 	const rows =
 		projectPath !== undefined
-			? (stmtListSessionsByProject.all({ $project_path: projectPath }) as SessionRow[])
+			? (stmtListSessionsByProject.all({ project_path: projectPath }) as SessionRow[])
 			: (stmtListSessions.all() as SessionRow[]);
 
 	return rows.map((row) => rowToSession(row, []));
@@ -155,24 +156,24 @@ export function dbUpdateSession(
 	fields: Partial<Pick<Session, 'messageCount' | 'permissionMode' | 'name'>>,
 ): void {
 	if (fields.permissionMode !== undefined) {
-		stmtUpdatePermissionMode.run({ $permission_mode: fields.permissionMode, $id: id });
+		stmtUpdatePermissionMode.run({ permission_mode: fields.permissionMode, id });
 	}
 	if (fields.messageCount !== undefined) {
-		stmtUpdateMessageCount.run({ $message_count: fields.messageCount, $id: id });
+		stmtUpdateMessageCount.run({ message_count: fields.messageCount, id });
 	}
 	if (fields.name !== undefined) {
-		stmtUpdateName.run({ $name: fields.name, $id: id });
+		stmtUpdateName.run({ name: fields.name, id });
 	}
 }
 
 export function dbDeleteSession(id: string): void {
-	stmtDeleteSession.run({ $id: id });
+	stmtDeleteSession.run({ id });
 }
 
 export function dbAppendMessage(sessionId: string, msg: SessionMessage): void {
-	stmtInsertMessage.run({ $session_id: sessionId, $role: msg.role, $content: msg.content });
+	stmtInsertMessage.run({ session_id: sessionId, role: msg.role, content: msg.content });
 }
 
 export function dbUpdateMessageCount(sessionId: string, count: number): void {
-	stmtUpdateMessageCount.run({ $message_count: count, $id: sessionId });
+	stmtUpdateMessageCount.run({ message_count: count, id: sessionId });
 }

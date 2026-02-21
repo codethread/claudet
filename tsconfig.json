@@ -7,11 +7,12 @@
 		"moduleDetection": "force",
 		"allowJs": true,
 
-		// Bundler mode
+		// Bundler mode — tsx handles module resolution at runtime
 		"moduleResolution": "bundler",
 		"allowImportingTsExtensions": true,
 		"verbatimModuleSyntax": true,
 		"noEmit": true,
+		"types": ["node"],
 
 		// Best practices
 		"strict": true,

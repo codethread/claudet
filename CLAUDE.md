@@ -43,7 +43,7 @@ Skip steps 1-2 and 6 from the Complex Workflow. Proceed directly to:
 ## [ALL AGENTS] Rules
 
 - ALWAYS update [docs/architecture.md](./docs/architecture.md) with up-to-date information after architectural changes
-- Use `bun` for all runtime operations (see Runtime & Tooling below)
+- Use `npm` for all package management operations (see Runtime & Tooling below)
 - Follow test-driven development when writing code
 
 ## Documentation
@@ -53,38 +53,33 @@ Skip steps 1-2 and 6 from the Complex Workflow. Proceed directly to:
 
 ## Runtime & Tooling
 
-This project uses **Bun** as the runtime.
+This project uses **Node.js** (via `tsx`) as the runtime and **npm** as the package manager.
 
 Key points:
 
-- Use `bun` instead of `node`, `npm`, `pnpm`, or `vite`
-- Use `bun test` for testing (not Jest or Vitest)
-- Bun automatically loads `.env` files (no dotenv package needed)
-- Prefer Bun APIs: `Bun.serve()`, `Bun.file()`, `bun:sqlite`, etc.
+- Use `npm` for package management
+- Use `npm test` for testing (Vitest)
+- Use `tsx` for TypeScript execution (installed locally, invoked via npm scripts)
+- Server uses Express v5, better-sqlite3 for SQLite, Node.js `child_process` for spawning
 
 ## Quick Reference: Development Commands
 
 ```bash
-# Setup (first time or when assets need regenerating)
-bun run setup                     # Generate certs + PWA icons
-
 # Development
-bun dev                           # Start dev server (HTTPS port 3000)
-bun run dev:test                  # Start dev server with test backend
-bun start                         # Production server
-bun run build                     # Build for production
+npm run dev                       # Start dev server (port 3001, hot reload)
+npm run dev:test                  # Start dev server with fake Claude responses
+npm start                         # Production server
 
 # Code Quality
-bun run format                    # Format code with Biome
-bun run format:check              # Check code formatting
-bun run lint                      # Lint code with Biome
-bun run lint:fix                  # Lint and fix issues
-bun run type-check                # TypeScript type checking
+npm run format                    # Format code with Biome
+npm run format:check              # Check code formatting
+npm run lint                      # Lint code with Biome
+npm run lint:fix                  # Lint and fix issues
+npm run type-check                # TypeScript type checking
 
 # Testing
-bun test                          # Run unit tests
-bun run test:e2e                  # E2E tests (headless)
+npm test                          # Run unit tests (vitest)
 
 # Final Validation
-bun run validate                  # Run all checks (type-check, format:check, lint, test, test:e2e, build)
+npm run validate                  # Run all checks (type-check, format:check, lint)
 ```

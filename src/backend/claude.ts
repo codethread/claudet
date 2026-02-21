@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
 	dbAppendMessage,
@@ -111,18 +112,24 @@ export async function sendMessage(sessionId: string, message: string): Promise<s
 	// Strip CLAUDECODE from the environment so nested sessions don't get blocked
 	const { CLAUDECODE: _, ...safeEnv } = process.env;
 
-	const proc = Bun.spawn(['claude', ...args], {
-		stdout: 'pipe',
-		stderr: 'pipe',
-		env: safeEnv,
+	const proc = spawn('claude', args, {
+		stdio: ['ignore', 'pipe', 'pipe'],
+		env: safeEnv as NodeJS.ProcessEnv,
 		cwd,
 	});
 
-	const [output, errText] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
+	const collectStream = (stream: NodeJS.ReadableStream): Promise<string> =>
+		new Promise((resolve) => {
+			const chunks: Buffer[] = [];
+			stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+			stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+		});
+
+	const [output, errText, exitCode] = await Promise.all([
+		collectStream(proc.stdout!),
+		collectStream(proc.stderr!),
+		new Promise<number>((resolve) => proc.on('close', (code) => resolve(code ?? 1))),
 	]);
-	const exitCode = await proc.exited;
 
 	if (exitCode !== 0) {
 		// User message stays in DB — this is acceptable behavior (user did send that message)
