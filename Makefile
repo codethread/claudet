@@ -39,8 +39,10 @@ validate: install
 mobile: install
 	cd mobile && npx expo start
 
+LAN_HOSTNAME ?= homelab.local
+
 mobile-lan: install
-	cd mobile && REACT_NATIVE_PACKAGER_HOSTNAME=homelab.local npx expo start --lan
+	cd mobile && REACT_NATIVE_PACKAGER_HOSTNAME=$(LAN_HOSTNAME) npx expo start --lan
 
 mobile-android: install
 	cd mobile && npx expo start --android

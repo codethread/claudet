@@ -24,14 +24,14 @@ export function startServer() {
 	const app = express();
 	app.use(express.json());
 
-	app.get('/health', (_req, res) => res.json({ ok: true }));
-
 	// Apply CORS headers and handle OPTIONS preflight on all routes
 	app.use((_req, res, next) => {
 		for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
 		if (_req.method === 'OPTIONS') return res.status(204).end();
 		next();
 	});
+
+	app.get('/health', (_req, res) => res.json({ ok: true }));
 
 	app.get('/api/models', (_req, res) => {
 		res.json({
@@ -167,8 +167,8 @@ export function startServer() {
 	});
 
 	const port = 3001;
-	// '::' enables dual-stack on Linux, accepting both IPv4 and IPv6 — needed for iOS mDNS
-	const server = app.listen(port, '::', () => {
+	// dual-stack: accepts IPv4 and IPv6; ipv6Only:false is the Linux default but stated explicitly for portability
+	const server = app.listen({ port, host: '::', ipv6Only: false }, () => {
 		const localIP = getLocalIP();
 		console.log(`\n${'='.repeat(50)}`);
 		console.log('🚀 Claudet API server running!');

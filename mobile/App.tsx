@@ -114,13 +114,13 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 		let cancelled = false;
 
 		async function init() {
-			console.log('[init] connecting to', SERVER_URL);
+			if (__DEV__) console.log('[init] connecting to', SERVER_URL);
 			try {
 				const [modelsData, settings] = await Promise.all([fetchModels(), fetchSettings()]);
 
 				if (cancelled) return;
 
-				console.log('[init] connected ok');
+				if (__DEV__) console.log('[init] connected ok');
 				setSelectedModel(modelsData.default);
 				setConnected(true);
 				setBaseDir(settings.baseDir);
@@ -138,7 +138,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				}
 			} catch (e) {
 				if (!cancelled) {
-					console.error('[init] connection failed:', e);
+					if (__DEV__) console.error('[init] connection failed:', e);
 					setError(
 						`Failed to connect to ${SERVER_URL}: ${e instanceof Error ? e.message : 'Unknown error'}`,
 					);
