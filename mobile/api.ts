@@ -11,6 +11,7 @@ function getServerUrl(): string {
 }
 
 export const SERVER_URL = getServerUrl();
+console.log('[api] SERVER_URL:', SERVER_URL);
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 	const res = await fetch(`${SERVER_URL}${path}`, options);
