@@ -11,6 +11,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import * as SecureStore from 'expo-secure-store';
 import {
 	fetchSessions,
 	fetchModels,
@@ -23,7 +24,10 @@ import {
 	sendChat,
 	fetchSessionMessages,
 	SERVER_URL,
+	setServerUrl,
 } from './api';
+
+const STORAGE_KEY_SERVER_URL = 'serverUrl';
 import { AppContext } from './AppContext';
 import type { ScrollHandle } from './AppContext';
 import { SessionsScreen } from './screens/SessionsScreen';
@@ -47,6 +51,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 	const [baseDir, setBaseDir] = useState<string | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+	const [serverUrl, setServerUrlState] = useState(SERVER_URL);
 
 	const scrollRef = useRef<ScrollHandle>(null);
 	const fetchedSessionsRef = useRef<Set<string>>(new Set());
@@ -86,6 +91,12 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 		}
 	}, []);
 
+	const handleSaveServerUrl = useCallback(async (url: string) => {
+		await SecureStore.setItemAsync(STORAGE_KEY_SERVER_URL, url);
+		setServerUrl(url);
+		setServerUrlState(url);
+	}, []);
+
 	const handleSetSessionPermissionMode = useCallback(
 		async (mode: PermissionMode) => {
 			if (!currentSessionId) return;
@@ -114,7 +125,12 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 		let cancelled = false;
 
 		async function init() {
-			if (__DEV__) console.log('[init] connecting to', SERVER_URL);
+			const savedUrl = await SecureStore.getItemAsync(STORAGE_KEY_SERVER_URL);
+			if (savedUrl) {
+				setServerUrl(savedUrl);
+				setServerUrlState(savedUrl);
+			}
+			if (__DEV__) console.log('[init] connecting to', savedUrl ?? SERVER_URL);
 			try {
 				const [modelsData, settings] = await Promise.all([fetchModels(), fetchSettings()]);
 
@@ -244,6 +260,8 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				handleSelectProject,
 				handleNewSession,
 				handleSaveBaseDir,
+				handleSaveServerUrl,
+				serverUrl,
 				handleSetSessionPermissionMode,
 				handleRenameSession,
 				handleDeleteSession,

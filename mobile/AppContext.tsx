@@ -22,6 +22,7 @@ export interface AppState {
 	baseDir: string | null;
 	projects: Project[];
 	currentProjectId: string | null;
+	serverUrl: string;
 	// Handlers
 	dismissError: () => void;
 	setInput: (v: string) => void;
@@ -30,6 +31,7 @@ export interface AppState {
 	handleSelectProject: (id: string) => void;
 	handleNewSession: () => Promise<void>;
 	handleSaveBaseDir: (value: string) => Promise<void>;
+	handleSaveServerUrl: (url: string) => Promise<void>;
 	handleSetSessionPermissionMode: (mode: PermissionMode) => Promise<void>;
 	handleRenameSession: (id: string, name: string) => Promise<void>;
 	handleDeleteSession: (id: string) => Promise<void>;
@@ -53,6 +55,7 @@ const defaultState: AppState = {
 	baseDir: null,
 	projects: [],
 	currentProjectId: null,
+	serverUrl: '',
 	dismissError: () => {},
 	setInput: () => {},
 	setCurrentSessionId: () => {},
@@ -60,6 +63,7 @@ const defaultState: AppState = {
 	handleSelectProject: () => {},
 	handleNewSession: async () => {},
 	handleSaveBaseDir: async () => {},
+	handleSaveServerUrl: async () => {},
 	handleSetSessionPermissionMode: async () => {},
 	handleRenameSession: async () => {},
 	handleDeleteSession: async () => {},

@@ -15,9 +15,13 @@ import { useAppContext } from '../AppContext';
 function BaseDirInput({
   onSave,
   isDark,
+  placeholder = 'e.g. dev',
+  prefix = '~/',
 }: {
   onSave: (value: string) => Promise<void>;
   isDark: boolean;
+  placeholder?: string;
+  prefix?: string;
 }) {
   const [value, setValue] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -40,12 +44,12 @@ function BaseDirInput({
   return (
     <View>
       <View className="flex-row items-center gap-2">
-        <Text className={`text-[14px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>~/</Text>
+        {prefix ? <Text className={`text-[14px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{prefix}</Text> : null}
         <TextInput
           className={`flex-1 rounded-lg px-3 py-2 text-[14px] border ${
             isDark ? 'bg-zinc-800 text-white border-zinc-700' : 'bg-gray-50 text-black border-gray-200'
           }`}
-          placeholder="e.g. dev"
+          placeholder={placeholder}
           placeholderTextColor={isDark ? '#636366' : '#8e8e93'}
           value={value}
           onChangeText={setValue}
@@ -88,13 +92,16 @@ export function SettingsScreen() {
     selectedModel,
     currentSessionId,
     sessions,
+    serverUrl,
     handleSelectProject,
     handleSaveBaseDir,
+    handleSaveServerUrl,
     handleSetSessionPermissionMode,
     setSelectedModel,
   } = useAppContext();
 
   const [editingBaseDir, setEditingBaseDir] = useState(false);
+  const [editingServerUrl, setEditingServerUrl] = useState(false);
 
   const currentSession = sessions.find((s) => s.id === currentSessionId) ?? null;
   const permissionMode = currentSession?.permissionMode ?? 'allowEdits';
@@ -130,6 +137,31 @@ export function SettingsScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Server URL */}
+        <SectionHeader label="Server" />
+        <View className={`mx-4 ${cardClass}`}>
+          <View className="px-4 py-3">
+            {!editingServerUrl ? (
+              <View className="flex-row items-center justify-between">
+                <Text className={`${titleClass} flex-1 mr-3`} numberOfLines={1}>{serverUrl}</Text>
+                <Pressable onPress={() => setEditingServerUrl(true)}>
+                  <Text className="text-[#007AFF] text-[14px]">Edit</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <BaseDirInput
+                placeholder={serverUrl}
+                prefix=""
+                onSave={async (value) => {
+                  await handleSaveServerUrl(value);
+                  setEditingServerUrl(false);
+                }}
+                isDark={isDark}
+              />
+            )}
+          </View>
+        </View>
+
         {/* Base Directory */}
         <SectionHeader label="Base Directory" />
         <View className={`mx-4 ${cardClass}`}>

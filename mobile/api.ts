@@ -13,8 +13,13 @@ function getServerUrl(): string {
 export const SERVER_URL = getServerUrl();
 if (__DEV__) console.log('[api] SERVER_URL:', SERVER_URL);
 
+let activeServerUrl = SERVER_URL;
+export function setServerUrl(url: string) {
+	activeServerUrl = url;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-	const res = await fetch(`${SERVER_URL}${path}`, options);
+	const res = await fetch(`${activeServerUrl}${path}`, options);
 	const data = (await res.json()) as T & { error?: string };
 	if (!res.ok) throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
 	return data;
