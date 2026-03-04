@@ -5,10 +5,16 @@ export type Project = { id: string; name: string; path: string };
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'target', '.next', 'vendor', '.git']);
 
-export function discoverProjects(basePath: string, maxDepth = 3): Project[] {
+export function discoverProjects(
+	basePath: string,
+	excludedPaths: string[] = [],
+	maxDepth = 3,
+): Project[] {
 	const projects: Project[] = [];
 	walk(basePath, 0, maxDepth, projects);
-	return projects.sort((a, b) => a.name.localeCompare(b.name));
+	return projects
+		.filter((p) => !excludedPaths.includes(p.id))
+		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function isDirectory(path: string): boolean {

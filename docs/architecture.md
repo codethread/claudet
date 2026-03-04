@@ -35,17 +35,19 @@ An Express v5 server serves as the API for the React Native mobile client.
 
 ### 3. Settings & Projects (`src/backend/settings.ts`, `src/backend/projects.ts`)
 
-- Settings stored at `~/.claudet/config.json` — currently just `{ baseDir: string | null }`
-- `discoverProjects(basePath)` — synchronous fs walk, max 3 levels, skips `node_modules`/`dist`/`.git`/etc., finds git repos (directories containing `.git`), returns sorted by name
+- Settings stored at `~/.claudet/config.json` — `{ baseDir: string | null, excludedProjects: string[] }`
+- `discoverProjects(basePath, excludedPaths)` — synchronous fs walk, max 3 levels, skips `node_modules`/`dist`/`.git`/etc., finds git repos (directories containing `.git`), filters excluded paths, returns sorted by name
+- `excludeProject(path)` — adds a project path to `excludedProjects` in settings (persists exclusion)
 
 ## API Endpoints (HTTP, port 3001)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/models` | GET | Returns `{ models: ['haiku', 'sonnet'], default: 'haiku' }` |
+| `/api/models` | GET | Returns `{ models: ['haiku', 'sonnet', 'opus'], default: 'haiku' }` |
 | `/api/settings` | GET | Returns `{ baseDir: string \| null }` |
 | `/api/settings` | POST | Body: `{ baseDir: string }`, validates & saves, returns `{ baseDir }` or 400 |
-| `/api/projects` | GET | Returns `{ projects: [{ id, name, path }] }` (discovers git repos under baseDir) |
+| `/api/projects` | GET | Returns `{ projects: [{ id, name, path }] }` (discovers git repos under baseDir, filters excluded) |
+| `/api/projects` | DELETE | Body: `{ id: string }`, adds project path to excluded list |
 | `/api/sessions` | GET | Returns `{ sessions: [{ id, model, createdAt, projectPath }] }`; optional `?projectPath=` filter |
 | `/api/sessions` | POST | Body: `{ model?, projectPath }` (required), returns `{ id, model, createdAt, projectPath }` |
 | `/api/chat` | POST | Send message, body: `{ message, sessionId }`, returns `{ response }` |
@@ -69,7 +71,11 @@ mobile/
 ├── components/
 │   ├── ChatMessage.tsx      # Chat bubble with react-native-markdown-display
 │   ├── EmptyProjectView.tsx # Shown when no project is selected
-│   └── SettingsDrawer.tsx   # Left-side modal drawer (baseDir, projects, model, sessions)
+│   ├── SideDrawer.tsx       # Left swipe-in drawer (projects + sessions navigation)
+│   ├── Header.tsx           # Top bar with hamburger (opens SideDrawer) and new session button
+│   ├── ChatArea.tsx         # Scrollable message list
+│   ├── InputBar.tsx         # Text input + send button
+│   └── SessionActionModal.tsx # Long-press session actions (rename, delete)
 └── assets/                  # Expo default assets
 ```
 
@@ -78,11 +84,11 @@ mobile/
 - `sessions`: All known sessions (fetched from server on mount)
 - `currentSessionId`: Active session
 - `messagesBySession`: Per-session message history (`Map<sessionId, Message[]>`)
-- `selectedModel`: Currently selected model ('haiku' | 'sonnet')
+- `selectedModel`: Currently selected model ('haiku' | 'sonnet' | 'opus')
+- `availableModels`: Models list fetched from server on mount
 - `input`: Current text input
 - `loading`: Whether a request is in flight
 - `error`: Last error message
-- `settingsOpen`: Whether the settings drawer is open
 - `connected`: Whether the server is reachable
 - `baseDir`: Base directory setting from server (e.g. `"dev"`)
 - `projects`: Discovered git repos under baseDir
@@ -97,10 +103,12 @@ mobile/
 
 ### Layout
 
-1. **Header**: Hamburger (opens settings) | Greeting | Plus (new session)
-2. **Chat area**: `ScrollView` with `ChatMessage` bubbles, auto-scroll to bottom
-3. **Input row**: Multiline `TextInput` + Send button
-4. **SettingsDrawer**: Modal with slide animation — model picker, sessions list, new session button, connection status
+1. **Bottom tabs**: Sessions (chat) | Settings (configuration)
+2. **Sessions tab header**: Hamburger (opens SideDrawer) | Greeting | Plus (new session)
+3. **SideDrawer**: Animated left slide-in panel — projects list + sessions list for current project; opened by hamburger or swipe-from-left-edge
+4. **Chat area**: `ScrollView` with `ChatMessage` bubbles, auto-scroll to bottom
+5. **Input row**: Multiline `TextInput` + Send button
+6. **Settings tab**: Server URL, base directory, project list (with remove), model picker, permissions
 
 ### Features
 
@@ -108,7 +116,8 @@ mobile/
 |---|---|
 | Project management (discover/select git repos) | ✅ |
 | Session management (create/list/switch, scoped to project) | ✅ |
-| Model selection (haiku/sonnet) | ✅ |
+| Project removal (exclude from discovery, persisted in config) | ✅ |
+| Model selection (haiku/sonnet/opus) | ✅ |
 | Markdown rendering (`react-native-markdown-display`) | ✅ |
 | Chat UI (bubbles, loading, auto-scroll) | ✅ |
 | Settings drawer | ✅ |

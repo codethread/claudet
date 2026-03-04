@@ -19,6 +19,7 @@ import {
 	saveSettings as apiSaveSettings,
 	updateSession as apiUpdateSession,
 	deleteSession as apiDeleteSession,
+	removeProject as apiRemoveProject,
 	fetchProjects,
 	createSession,
 	sendChat,
@@ -41,6 +42,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 	const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 	const [messagesBySession, setMessagesBySession] = useState<Map<string, Message[]>>(new Map());
 	const [selectedModel, setSelectedModel] = useState<string>('haiku');
+	const [availableModels, setAvailableModels] = useState<string[]>(['haiku', 'sonnet']);
 	const [input, setInput] = useState('');
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -95,6 +97,9 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 		await SecureStore.setItemAsync(STORAGE_KEY_SERVER_URL, url);
 		setServerUrl(url);
 		setServerUrlState(url);
+		const modelsData = await fetchModels();
+		setAvailableModels(modelsData.models);
+		setSelectedModel((prev) => (modelsData.models.includes(prev) ? prev : modelsData.default));
 	}, []);
 
 	const handleSetSessionPermissionMode = useCallback(
@@ -120,6 +125,18 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 		[currentSessionId],
 	);
 
+	const handleRemoveProject = useCallback(
+		async (id: string) => {
+			await apiRemoveProject(id);
+			setProjects((prev) => prev.filter((p) => p.id !== id));
+			if (currentProjectId === id) {
+				setCurrentProjectId(null);
+				setCurrentSessionId(null);
+			}
+		},
+		[currentProjectId],
+	);
+
 	// On mount: load models + settings in parallel; if baseDir set, also load projects + sessions
 	useEffect(() => {
 		let cancelled = false;
@@ -137,7 +154,8 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				if (cancelled) return;
 
 				if (__DEV__) console.log('[init] connected ok');
-				setSelectedModel(modelsData.default);
+				setAvailableModels(modelsData.models);
+			setSelectedModel(modelsData.default);
 				setConnected(true);
 				setBaseDir(settings.baseDir);
 
@@ -244,6 +262,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				currentSessionId,
 				messagesBySession,
 				selectedModel,
+				availableModels,
 				input,
 				loading,
 				error,
@@ -265,6 +284,7 @@ function AppStateProvider({ children }: { children: React.ReactNode }) {
 				handleSetSessionPermissionMode,
 				handleRenameSession,
 				handleDeleteSession,
+				handleRemoveProject,
 				send,
 				scrollRef,
 				setShowScrollButton,

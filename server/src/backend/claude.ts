@@ -12,7 +12,7 @@ import {
 
 export type PermissionMode = 'allowEdits' | 'dangerouslySkipPermissions';
 
-export type ClaudeModel = 'haiku' | 'sonnet';
+export type ClaudeModel = 'haiku' | 'sonnet' | 'opus';
 
 export interface SessionMessage {
 	role: 'user' | 'assistant';

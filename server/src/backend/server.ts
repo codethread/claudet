@@ -11,7 +11,7 @@ import {
 	sendMessage,
 	setSessionPermissionMode,
 } from './claude';
-import { loadSettings, saveSettings, validateBaseDir } from './settings';
+import { excludeProject, loadSettings, saveSettings, validateBaseDir } from './settings';
 import { discoverProjects } from './projects';
 
 const CORS_HEADERS = {
@@ -33,11 +33,11 @@ export function startServer() {
 
 	app.get('/health', (_req, res) => res.json({ ok: true }));
 
+	const SUPPORTED_MODELS = ['haiku', 'sonnet', 'opus'] as const;
+	const DEFAULT_MODEL = process.env.NODE_ENV === 'production' ? 'sonnet' : 'haiku';
+
 	app.get('/api/models', (_req, res) => {
-		res.json({
-			models: ['haiku', 'sonnet'],
-			default: process.env.NODE_ENV === 'production' ? 'sonnet' : 'haiku',
-		});
+		res.json({ models: SUPPORTED_MODELS, default: DEFAULT_MODEL });
 	});
 
 	app.get('/api/settings', (_req, res) => {
@@ -48,9 +48,10 @@ export function startServer() {
 		try {
 			const body = req.body as { baseDir?: unknown };
 			const baseDir = validateBaseDir(body.baseDir);
-			const settings = { baseDir };
+			const current = loadSettings();
+			const settings = { baseDir, excludedProjects: current.excludedProjects };
 			saveSettings(settings);
-			res.json(settings);
+			res.json({ baseDir });
 		} catch (error) {
 			res
 				.status(400)
@@ -59,11 +60,20 @@ export function startServer() {
 	});
 
 	app.get('/api/projects', (_req, res) => {
-		const { baseDir } = loadSettings();
+		const { baseDir, excludedProjects } = loadSettings();
 		if (!baseDir) return res.json({ projects: [] });
 		const basePath = join(homedir(), baseDir);
-		const projects = discoverProjects(basePath);
+		const projects = discoverProjects(basePath, excludedProjects);
 		return res.json({ projects });
+	});
+
+	app.delete('/api/projects', (req, res) => {
+		const body = req.body as { id?: unknown };
+		if (!body.id || typeof body.id !== 'string') {
+			return res.status(400).json({ error: 'id is required' });
+		}
+		excludeProject(body.id);
+		return res.json({ success: true });
 	});
 
 	app.get('/api/sessions', (req, res) => {
@@ -88,7 +98,9 @@ export function startServer() {
 		if (!body.projectPath || typeof body.projectPath !== 'string') {
 			return res.status(400).json({ error: 'projectPath is required' });
 		}
-		const model = body.model === 'sonnet' ? 'sonnet' : 'haiku';
+		const model = SUPPORTED_MODELS.includes(body.model as (typeof SUPPORTED_MODELS)[number])
+			? (body.model as (typeof SUPPORTED_MODELS)[number])
+			: DEFAULT_MODEL;
 		const permissionMode =
 			body.permissionMode === 'dangerouslySkipPermissions'
 				? ('dangerouslySkipPermissions' as const)

@@ -13,6 +13,7 @@ export interface AppState {
 	currentSessionId: string | null;
 	messagesBySession: Map<string, Message[]>;
 	selectedModel: string;
+	availableModels: string[];
 	input: string;
 	loading: boolean;
 	error: string | null;
@@ -35,6 +36,7 @@ export interface AppState {
 	handleSetSessionPermissionMode: (mode: PermissionMode) => Promise<void>;
 	handleRenameSession: (id: string, name: string) => Promise<void>;
 	handleDeleteSession: (id: string) => Promise<void>;
+	handleRemoveProject: (id: string) => Promise<void>;
 	send: () => Promise<void>;
 	scrollRef: RefObject<ScrollHandle | null>;
 	setShowScrollButton: (v: boolean) => void;
@@ -46,6 +48,7 @@ const defaultState: AppState = {
 	currentSessionId: null,
 	messagesBySession: new Map(),
 	selectedModel: 'haiku',
+	availableModels: ['haiku', 'sonnet'],
 	input: '',
 	loading: false,
 	error: null,
@@ -67,6 +70,7 @@ const defaultState: AppState = {
 	handleSetSessionPermissionMode: async () => {},
 	handleRenameSession: async () => {},
 	handleDeleteSession: async () => {},
+	handleRemoveProject: async () => {},
 	send: async () => {},
 	scrollRef: { current: null },
 	setShowScrollButton: () => {},

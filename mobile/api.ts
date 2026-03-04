@@ -58,6 +58,14 @@ export async function fetchProjects(): Promise<Project[]> {
 	return data.projects;
 }
 
+export async function removeProject(id: string): Promise<void> {
+	await apiFetch<{ success: boolean }>('/api/projects', {
+		method: 'DELETE',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ id }),
+	});
+}
+
 export async function fetchSessions(projectPath?: string): Promise<Session[]> {
 	const query = projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : '';
 	const data = await apiFetch<{ sessions: Session[] }>(`/api/sessions${query}`);

@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import {
   View,
   Text,
+  Alert,
   ScrollView,
   Pressable,
   TextInput,
@@ -90,6 +91,7 @@ export function SettingsScreen() {
     projects,
     currentProjectId,
     selectedModel,
+    availableModels,
     currentSessionId,
     sessions,
     serverUrl,
@@ -97,6 +99,7 @@ export function SettingsScreen() {
     handleSaveBaseDir,
     handleSaveServerUrl,
     handleSetSessionPermissionMode,
+    handleRemoveProject,
     setSelectedModel,
   } = useAppContext();
 
@@ -190,22 +193,43 @@ export function SettingsScreen() {
                 </Text>
               ) : (
                 projects.map((project, i) => (
-                  <Pressable
+                  <View
                     key={project.id}
-                    onPress={() => {
-                      void Haptics.selectionAsync();
-                      handleSelectProject(project.id);
-                    }}
                     className={`${rowClass} ${i === projects.length - 1 ? 'border-b-0' : ''}`}
                   >
-                    <View className="flex-1 mr-3">
+                    <Pressable
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        handleSelectProject(project.id);
+                      }}
+                      className="flex-1 mr-3"
+                    >
                       <Text className={titleClass} numberOfLines={1}>{project.name}</Text>
                       <Text className={subtitleClass} numberOfLines={1}>{project.path}</Text>
-                    </View>
+                    </Pressable>
                     {currentProjectId === project.id && (
-                      <Text className="text-[#007AFF] text-[16px] font-bold">✓</Text>
+                      <Text className="text-[#007AFF] text-[16px] font-bold mr-3">✓</Text>
                     )}
-                  </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        Alert.alert(
+                          'Remove Project',
+                          `Remove "${project.name}" from the project list?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Remove',
+                              style: 'destructive',
+                              onPress: () => void handleRemoveProject(project.id),
+                            },
+                          ],
+                        );
+                      }}
+                      hitSlop={12}
+                    >
+                      <Text className={`text-[18px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>✕</Text>
+                    </Pressable>
+                  </View>
                 ))
               )}
             </View>
@@ -215,14 +239,14 @@ export function SettingsScreen() {
         {/* Model */}
         <SectionHeader label="Model" />
         <View className={`mx-4 ${cardClass}`}>
-          {['haiku', 'sonnet'].map((model, i) => (
+          {availableModels.map((model, i) => (
             <Pressable
               key={model}
               onPress={() => {
                 void Haptics.selectionAsync();
                 setSelectedModel(model);
               }}
-              className={`${rowClass} ${i === 1 ? 'border-b-0' : ''}`}
+              className={`${rowClass} ${i === availableModels.length - 1 ? 'border-b-0' : ''}`}
             >
               <Text className={titleClass}>{model.charAt(0).toUpperCase() + model.slice(1)}</Text>
               {selectedModel === model && (
